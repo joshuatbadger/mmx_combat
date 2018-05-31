@@ -9,13 +9,14 @@ class BasePlayerObj(metaclass=ABCMeta):
         # Get all player possible states
         self.username = None
         self.on_ground = None
-        self.jumping = None
+        # self.jumping = None
         self.can_jump = None
         self.x_velocity = None
         self.y_velocity = None
         self.run = None
         self.charge_level = None
         self.direction = None
+        self.velocity_hold = None
         self.firing = None
         self.wall_hold = None
         self.taking_damage = None
@@ -43,13 +44,14 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         # Get all player possible states
         self.username = username
         self.on_ground = True
-        self.jumping = False
+        # self.jumping = False
         self.can_jump = True
         self.x_velocity = 0
         self.y_velocity = 0
         self.run = False
         self.charge_level = 0
         self.direction = 'right'
+        self.velocity_hold = 0
         self.firing = False
         self.wall_hold = False
         self.taking_damage = False
@@ -57,6 +59,9 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         self.hanging = False
         self.dashing = -1
         self.can_air_dash = False
+
+        # Initialize current key presses
+        self.cur_keys = pygame.key.get_pressed()
 
         # Build collision rects and apply standing rectangle
         self.standing_image = pygame.Surface([25,50])
@@ -84,8 +89,13 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
 
     def update(self):
         """ Move the player """
+        # Get current key presses
+        self.cur_keys = pygame.key.get_pressed()
         # Apply gravity
         self.calc_gravity()
+
+        if self.velocity_hold > 0:
+            self.velocity_hold -= 1
 
         # Check dashing
         if self.dashing > 0 or (self.dashing == 0 and not self.on_ground):
@@ -94,32 +104,34 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
             if self.dashing > 0:
                 self.dashing -= 1
         elif self.dashing == 0 and self.ducking:
-            self.dashing = -1
             self.change_rect(self.ducking_image, self.ducking_rect)
             self.stop()
-        elif self.dashing == 0 and self.on_ground:
-            self.dashing = -1
+            if not self.cur_keys[pygame.K_LSHIFT] and not self.cur_keys[pygame.K_RSHIFT]:
+                self.dashing = -1
+        elif self.dashing == 0 and (self.on_ground or self.wall_hold):
             self.change_rect(self.standing_image, self.standing_rect)
             self.stop()
-            if pygame.key.get_pressed()[pygame.K_RIGHT]:
+            if self.cur_keys[pygame.K_RIGHT]:
                 self.go_right()
-            elif pygame.key.get_pressed()[pygame.K_LEFT]:
+            elif self.cur_keys[pygame.K_LEFT]:
                 self.go_left()
-            # else:
-            #     self.stop()
+            if not self.cur_keys[pygame.K_LSHIFT] and not self.cur_keys[pygame.K_RSHIFT]:
+                self.dashing = -1
 
         # Horizontal motion
         self.rect.x += self.x_velocity
         # Horizontal Collisions!
         block_hit_list = pygame.sprite.spritecollide(self, self.walls, False)
+        self.wall_hold = False
         for block in block_hit_list:
             if self.x_velocity < 0:
                 self.rect.left = block.rect.right
-            else:
+            elif self.x_velocity > 0:
                 self.rect.right = block.rect.left
+            self.wall_hold = True
+            self.x_velocity = 0
+            self.dashing = -1
 
-        # Wall hanging?
-        # if len(block_hit_list) > 0:
 
 
 
@@ -134,9 +146,13 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
                 self.rect.top = block.rect.bottom
                 self.y_velocity = 0
             else:
+                # Ground
                 self.rect.bottom = block.rect.top
                 self.y_velocity = 0
                 self.on_ground = True
+                self.wall_hold = False
+                if not self.cur_keys[pygame.K_SPACE]:
+                    self.can_jump = True
 
         ret_dir = dict()
         for attrib in dir(self):
@@ -150,8 +166,10 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
 
     def calc_gravity(self):
         """Are we gravity-ing?"""
-        if not pygame.key.get_pressed()[pygame.K_SPACE] and self.y_velocity < 0:
+        if not self.cur_keys[pygame.K_SPACE] and self.y_velocity < 0:
             self.y_velocity = 0
+        elif self.wall_hold:
+            self.y_velocity = 6
         else:
             if self.y_velocity == 0:
                 self.y_velocity = CN.GRAVITY
@@ -168,39 +186,80 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
 
     def jump(self):
         """Jump action"""
+        # Don't do anything if we can't jump
+        if not self.can_jump:
+            return
+
+        # Check if we're on the ground
         self.rect.y += 2
         platform_hit_list = pygame.sprite.spritecollide(self, self.walls, False)
         self.rect.y -= 2
 
         if platform_hit_list:
+            # we're on the ground
             self.change_rect(self.standing_image, self.standing_rect)
             self.y_velocity = -1 * CN.JUMP_SPEED
             self.on_ground = False
+            self.can_jump = False
+
+        elif self.wall_hold:
+            # not on the ground, but we're wall holding
+            # Prevent me from jumping again
+            self.can_jump = False
+            # find out which direction to jump.
+            # check left walls
+            self.rect.x -= 2
+            l_wall_list = pygame.sprite.spritecollide(self, self.walls, False)
+
+            # check right walls
+            self.rect.x += 4
+            r_wall_list = pygame.sprite.spritecollide(self, self.walls, False)
+
+            # reset position
+            self.rect.x -= 2
+
+            self.y_velocity = -1 * CN.JUMP_SPEED
+            self.velocity_hold = 3
+
+            if l_wall_list:
+                # there's a wall to the left, jump right
+                self.x_velocity = 10
+            else:
+                # wall on right, jump left
+                self.x_velocity = -10
+
+    def allow_jump(self):
+        self.can_jump = True
 
     def go_left(self):
         self.direction = 'left'
-        if not pygame.key.get_pressed()[pygame.K_RIGHT] and not self.ducking:
-            self.x_velocity = -10
-        else:
-            self.x_velocity = 0
+        if self.velocity_hold == 0:
+            if not self.cur_keys[pygame.K_RIGHT] and not self.ducking:
+                self.x_velocity = -10
+            else:
+                self.x_velocity = 0
 
     def go_right(self):
         self.direction = 'right'
-        if not pygame.key.get_pressed()[pygame.K_LEFT] and not self.ducking:
-            self.x_velocity = 10
-        else:
-            self.x_velocity = 0
+        if self.velocity_hold == 0:
+            if not self.cur_keys[pygame.K_LEFT] and not self.ducking:
+                self.x_velocity = 10
+            else:
+                self.x_velocity = 0
 
     def dash(self):
         if self.dashing == -1 and (self.on_ground or self.can_air_dash):
             self.dashing = 10
+            self.velocity_hold = 10
             self.change_rect(self.dashing_image, self.dashing_rect)
 
     def stop(self):
-        self.x_velocity = 0
+        if not self.velocity_hold:
+            self.x_velocity = 0
+        # self.wall_hold = False
 
     def duck(self):
-        if self.on_ground and pygame.key.get_pressed()[pygame.K_DOWN]:
+        if self.on_ground and self.cur_keys[pygame.K_DOWN]:
             self.ducking = True
             self.x_velocity = 0
             self.y_velocity = 0

@@ -57,31 +57,43 @@ def start_game():
         player.walls = level.wall_list
         level.all_sprite_list.add(player)
 
-
-
     # main game loop
     while True:
         # os.system("cls")
         pressed_keys = []
         pressed_keys_str = ''
+        cur_keys = pygame.key.get_pressed()
+        if cur_keys[pygame.K_LEFT] or cur_keys[pygame.K_RIGHT]:
+            if cur_keys[pygame.K_LEFT]:
+                local_player.go_left()
+            if cur_keys[pygame.K_RIGHT]:
+                local_player.go_right()
+        else:
+            local_player.stop()
+        if cur_keys[pygame.K_DOWN]:
+            local_player.duck()
+        if cur_keys[pygame.K_SPACE]:
+            local_player.jump()
+        if cur_keys[pygame.K_LSHIFT] or cur_keys[pygame.K_RSHIFT]:
+            local_player.dash()
         for event in pygame.event.get():
             if event.type == pygame.QUIT: sys.exit()
             # print(event)
             if event.type == pygame.KEYDOWN:
-                print(event.key)
-                if event.key == pygame.K_SPACE:
-                    local_player.jump()
-                if event.key == pygame.K_LEFT:
-                    local_player.go_left()
-                if event.key == pygame.K_RIGHT:
-                    local_player.go_right()
-                if event.key == pygame.K_DOWN:
-                    local_player.duck()
-                if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                    local_player.dash()
-                if event.key == 269 and CN.FPS > 1:
+                # print(event.key)
+                # if event.key == pygame.K_SPACE:
+                #     local_player.jump()
+                # if event.key == pygame.K_LEFT:
+                #     local_player.go_left()
+                # if event.key == pygame.K_RIGHT:
+                #     local_player.go_right()
+                # if event.key == pygame.K_DOWN:
+                #     local_player.duck()
+                # if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                #     local_player.dash()
+                if event.key == pygame.K_KP_MINUS and CN.FPS > 1:
                     CN.FPS -= 1
-                if event.key == 270 and CN.FPS < 30:
+                if event.key == pygame.K_KP_PLUS and CN.FPS < 30:
                     CN.FPS += 1
 
             if event.type == pygame.KEYUP:
@@ -97,6 +109,8 @@ def start_game():
                         local_player.go_left()
                 if event.key == pygame.K_DOWN:
                     local_player.standup()
+                if event.key == pygame.K_SPACE:
+                    local_player.allow_jump()
 
             # if (not pygame.key.get_pressed().get(pygame.K_LEFT, None) and not pygame.key.get_pressed().get(pygame.K_LEFT, None)) and local_player.dashing < 0:
             # cur_pressed = set(pygame.key.get_pressed())
@@ -123,7 +137,9 @@ def start_game():
             SCREEN.blit(text_surf, text_rect)
             i+=1
             for k,v in local_state.items():
-                if k != 'username':
+                # print(k)
+                # print("\t" + str(type(v)))
+                if k != 'username' and not callable(v):
                     text_surf, text_rect = make_text("{}: {}".format(k,str(v)), CN.WHITE, CN.BLACK, 30, 10+(i*1.1*CN.BASICFONTSIZE))
                     SCREEN.blit(text_surf, text_rect)
                     i += 1
