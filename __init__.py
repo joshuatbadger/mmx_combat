@@ -1,6 +1,7 @@
 import os
 import sys
 import pygame
+import datetime
 
 def test():
     os.system("cls")
@@ -43,11 +44,22 @@ def start_game():
 
     BASICFONT = pygame.font.Font(None, CN.BASICFONTSIZE)
 
+    if not pygame.joystick.get_init():
+        pygame.joystick.init()
+
+    attached_joysticks = pygame.joystick.get_count()
+    if attached_joysticks:
+        print(f"Attached joysticks: {attached_joysticks}")
+        print("Getting first joystick")
+        jstick = pygame.joystick.Joystick(0)
+        jstick.init()
+
     level = TestLevel()
 
     all_players = []
 
-    local_player = LocalPlayerObj(USERNAME, level, 250, CN.SCREEN_HEIGHT-150)
+    local_player = LocalPlayerObj(USERNAME, level, jstick or None, 250, CN.SCREEN_HEIGHT-150)
+    # local_player = LocalPlayerObj(USERNAME, level, 250, CN.SCREEN_HEIGHT-150, {"RUN_SPEED":10})
     all_players.append(local_player)
 
     for remote_player in get_all_remote_players():
@@ -57,45 +69,44 @@ def start_game():
         player.walls = level.wall_list
         level.all_sprite_list.add(player)
 
+    longest_proc_frame = 0
+
     # main game loop
     while True:
         # os.system("cls")
         pressed_keys = []
         pressed_keys_str = ''
         cur_keys = pygame.key.get_pressed()
-        if cur_keys[pygame.K_LEFT] or cur_keys[pygame.K_RIGHT]:
-            if cur_keys[pygame.K_LEFT]:
+        cur_hat = jstick.get_hat(0)
+        if cur_keys[pygame.K_LEFT] or cur_keys[pygame.K_RIGHT] or cur_hat[0] != 0:
+            if cur_keys[pygame.K_LEFT] or cur_hat[0] == -1:
                 local_player.go_left()
-            if cur_keys[pygame.K_RIGHT]:
+            if cur_keys[pygame.K_RIGHT] or cur_hat[0] == 1:
                 local_player.go_right()
         else:
             local_player.stop()
-        if cur_keys[pygame.K_DOWN]:
-            local_player.duck()
-        if cur_keys[pygame.K_SPACE]:
-            local_player.jump()
-        if cur_keys[pygame.K_LSHIFT] or cur_keys[pygame.K_RSHIFT]:
-            local_player.dash()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT: sys.exit()
-            # print(event)
-            if event.type == pygame.KEYDOWN:
-                # print(event.key)
-                # if event.key == pygame.K_SPACE:
-                #     local_player.jump()
-                # if event.key == pygame.K_LEFT:
-                #     local_player.go_left()
-                # if event.key == pygame.K_RIGHT:
-                #     local_player.go_right()
-                # if event.key == pygame.K_DOWN:
-                #     local_player.duck()
-                # if event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                #     local_player.dash()
-                if event.key == pygame.K_KP_MINUS and CN.FPS > 1:
-                    CN.FPS -= 1
-                if event.key == pygame.K_KP_PLUS and CN.FPS < 30:
-                    CN.FPS += 1
 
+
+        if cur_keys[pygame.K_DOWN] or cur_hat[1] == -1:
+            local_player.duck()
+        if cur_keys[pygame.K_SPACE] or jstick.get_button(0):
+            local_player.jump()
+        if cur_keys[pygame.K_LSHIFT] or cur_keys[pygame.K_RSHIFT] or jstick.get_button(1):
+            local_player.dash()
+        if cur_keys[pygame.K_KP_MINUS] and CN.FPS > 1:
+            CN.FPS -= 1
+        if cur_keys[pygame.K_KP_PLUS] and CN.FPS < 30:
+            CN.FPS += 1
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                print(f"  Longest frame process: {longest_proc_frame} seconds")
+                frame_update = 1.0/CN.FPS
+                print(f"Single frame update max: {frame_update} seconds")
+                print("")
+                print("            Code status: {}".format("All good\n" if frame_update > longest_proc_frame else "Too heavy\n"))
+                sys.exit()
+
+            # Check for keys being released. We'll do joysticks next.
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_LEFT and local_player.x_velocity < 0 and local_player.dashing < 0:
                     if not pygame.key.get_pressed()[pygame.K_RIGHT]:
@@ -111,15 +122,36 @@ def start_game():
                     local_player.standup()
                 if event.key == pygame.K_SPACE:
                     local_player.allow_jump()
+                if event.key == pygame.K_LSHIFT and not cur_keys[pygame.K_RSHIFT]:
+                    local_player.allow_dash()
+                if event.key == pygame.K_RSHIFT and not cur_keys[pygame.K_LSHIFT]:
+                    local_player.allow_dash()
+
+            # if event.type == pygame.JOYBUTTONDOWN:
+            #     print(f"Joystick button {event.button} pressed.")
+            if event.type == pygame.JOYBUTTONUP:
+                # print(f"Joystick button {event.button} released.")
+                if event.button == 0:
+                    local_player.allow_jump()
+                if event.button == 1:
+                    local_player.allow_dash()
 
             # if (not pygame.key.get_pressed().get(pygame.K_LEFT, None) and not pygame.key.get_pressed().get(pygame.K_LEFT, None)) and local_player.dashing < 0:
             # cur_pressed = set(pygame.key.get_pressed())
             # if not set([pygame.K_LEFT, pygame.K_RIGHT]) & cur_pressed:
             #     local_player.stop()
 
+            # Now we check for whether the hat is being pressed/released
+            if event.type == pygame.JOYHATMOTION:
+                if event.value[0] == 0:
+                    local_player.stop()
+                if event.value[1] == 0:
+                    local_player.standup()
+
         SCREEN.fill(CN.BLACK)
 
         # Update info on all players
+        proc_start_time = datetime.datetime.now()
         for i, player in enumerate(all_players):
             # Get remote players through different arguments
             if i > 0:
@@ -128,6 +160,9 @@ def start_game():
             # TODO: allow remapping?
             else:
                 local_state = player.update()
+        proc_end_time = (datetime.datetime.now() - proc_start_time).total_seconds()
+        if proc_end_time > longest_proc_frame:
+            longest_proc_frame = proc_end_time
 
         if CN.DEBUG:
             text_surf, text_rect = make_text("{}: {}".format('username',str(local_state['username'])), CN.WHITE, CN.BLACK, 30, 10)
@@ -143,6 +178,15 @@ def start_game():
                     text_surf, text_rect = make_text("{}: {}".format(k,str(v)), CN.WHITE, CN.BLACK, 30, 10+(i*1.1*CN.BASICFONTSIZE))
                     SCREEN.blit(text_surf, text_rect)
                     i += 1
+        else:
+            text = """Controls:
+                    Movement: Arrow Keys or Controller D-Pad
+                    Jump: Spacebar or bottom Controller button (X)
+                    Dash: Shift or right Controller button (O)"""
+            for i, line in enumerate(text.split("\n")):
+                text_surf, text_rect = make_text(line.replace("    ", ""), CN.WHITE, CN.BLACK, 30, 10+(i*1.1*CN.BASICFONTSIZE))
+                SCREEN.blit(text_surf, text_rect)
+
 
         level.all_sprite_list.draw(SCREEN)
         pygame.display.flip()

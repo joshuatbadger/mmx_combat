@@ -35,6 +35,7 @@ class Level(object):
         screen.fill(BLACK)
         self.wall_list.draw(screen)
         self.misc_objs.draw(screen)
+        self.all_sprite_list.draw(screen)
 
 class TestLevel(Level):
     def __init__(self):

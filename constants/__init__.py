@@ -15,8 +15,6 @@ BASICFONTSIZE = 16
 pygame.init()
 BASICFONT = pygame.font.Font(None, BASICFONTSIZE)
 
-# user stuff
-
 
 # debug
 DEBUG = True
@@ -24,6 +22,13 @@ DEBUG = True
 
 
 # player stuff
-JUMP_SPEED = 22
+BASE_HEALTH = 16
 GRAVITY = 2
+JUMP_SPEED = 22
+RUN_SPEED = 10
+DASH_MULT = 2
+DASH_TIME = 10
+WALL_JUMP_VELOCITY_HOLD = 3
+WALL_DRAG_SPEED = 6
+
 DASH_ECHOS = 3
