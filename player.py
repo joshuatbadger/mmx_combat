@@ -1,10 +1,11 @@
 from datetime import datetime
 
+import math
 import pygame
 
 
 from abc import ABCMeta, abstractmethod
-from .weapons import Buster_1
+from .weapons import Buster1
 
 import MMX_Combat.constants as CN
 
@@ -50,7 +51,7 @@ class BasePlayerObj(metaclass=ABCMeta):
     def _redraw(self):
         pass
 
-class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
+class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
     def __init__(self, username, level, jstick, pu_dict=None):
         super(BasePlayerObj, self).__init__()
         # Initialize all player possible states with real values
@@ -60,7 +61,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         self.dashing = -1
         self.firing = False
         self.wall_hold = False
-        self.taking_damage = False
+        self.taking_damage = -1
+        self.dead_wait = 0
 
         # constants
         self.CAN_AIR_DASH = False
@@ -73,7 +75,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         self.DASH_TIME = CN.DASH_TIME
         self.WALL_JUMP_VELOCITY_HOLD = CN.WALL_JUMP_VELOCITY_HOLD
         self.WALL_DRAG_SPEED = CN.WALL_DRAG_SPEED
-        self.MAX_SHOTS = CN.WALL_DRAG_SPEED
+        self.MAX_SHOTS = CN.MAX_SHOTS
+        self.STAGGER_VELOCITY = CN.STAGGER_VELOCITY
         self.username = username
         self.jstick = jstick
 
@@ -91,6 +94,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         self.can_dash = True
         self.can_jump = True
         self.shot_weapons = []
+        self.health = self.BASE_HEALTH
+        self.wait_camera = False
 
 
         # Initialize current key presses and controller dpad positions
@@ -129,6 +134,17 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
 
     def update(self):
         """ Move the player """
+
+        # First make sure we're not dead, if so then wait a few seconds and then respawn
+        # TODO: Implement this...
+        if self.dead_wait:
+            self.dead_wait -= 1
+            return
+
+        # If we're taking damage, reduce the countdown before we can regain control
+        if self.taking_damage > 0:
+            self.taking_damage -= 1
+
         # Get current key presses
         self._cur_keys = pygame.key.get_pressed()
         if self.jstick:
@@ -147,6 +163,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
             # on the ground, i have to dash until I run out.
             self.x_velocity = (self.RUN_SPEED * self.DASH_MULT)*((-1)**['right','left'].index(self.direction))
             self.dashing -= 1
+            self.change_rect(self.dashing_image,self.dashing_rect)
         elif self.dashing >= 0 and not self.on_ground:
             # not on the ground, movement is optional. check what's pushed.
             # TODO: Determine whether we should be horizontal or vertical on collision rect
@@ -183,6 +200,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         elif self.dashing == -1 and not self.ducking:
             self.change_rect(self.standing_image, self.standing_rect)
 
+
+        dx = self.rect.x
         # Horizontal motion
         self.rect.x += self.x_velocity
         # Horizontal Collisions!
@@ -191,16 +210,26 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         for block in block_hit_list:
             self.change_rect(self.standing_image, self.standing_rect)
             if self.x_velocity < 0:
+                # if self.rect.x > block.rect.x:
                 self.rect.left = block.rect.right
             elif self.x_velocity > 0:
+                # if self.rect.x < block.rect.x:
                 self.rect.right = block.rect.left
             self.wall_hold = True
             self.can_dash = True
             self.x_velocity = 0
             self.dashing = -1
+            break
+        dx -= self.rect.x
+
+        enemy_hit_list = pygame.sprite.spritecollide(self, self.LEVEL.npc_enemies, False)
+        for enemy in enemy_hit_list:
+            self.damage(1)
+            return
 
 
 
+        dy = self.rect.y
 
         # Vertical motion
         self.rect.y += self.y_velocity
@@ -218,8 +247,26 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
                 self.y_velocity = 0
                 self.on_ground = True
                 self.wall_hold = False
+                if self.taking_damage == 0:
+                    self.taking_damage = -1
                 if not (self._cur_keys[pygame.K_SPACE] or self.jstick.get_button(0)):
                     self.can_jump = True
+            break
+
+        dy -= self.rect.y
+
+        if CN.DEBUG and math.hypot(abs(dx),abs(dy)) > math.hypot(CN.RUN_SPEED, CN.JUMP_SPEED):
+            print("NEW UPDATE!!!!\n-----------------------------------------------------")
+            for k,v in sorted(self.__dict__.items()):
+                print(f'{k}: {v}')
+            print("-----------------------------------------------------\n")
+
+        enemy_hit_list = pygame.sprite.spritecollide(self, self.LEVEL.npc_enemies, False)
+        for enemy in enemy_hit_list:
+            self.damage(1)
+            return
+
+
 
     def _apply_powerups(self, pu_dict):
         for k,v in pu_dict.items():
@@ -254,6 +301,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
 
     def calc_gravity(self):
         """Are we gravity-ing?"""
+        if self.taking_damage > 0:
+            return
         if not (self._cur_keys[pygame.K_SPACE] or self.jstick.get_button(0)) and self.y_velocity < 0:
             # We've released space and are moving upwards. Stop moving upwards.
             self.can_dash = self.CAN_AIR_DASH
@@ -276,7 +325,10 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         # Change hitbox size and position appropriately
         old_image = self.image
         old_rect = self.rect
-        new_rect.x = self.rect.x
+        if self.direction == "right":
+            new_rect.x = self.rect.x
+        else:
+            new_rect.x = self.rect.x + (self.rect.width - new_rect.width)
         new_rect.y = self.rect.y + (self.rect.height - new_rect.height)
         self.image = new_image
         self.rect = new_rect
@@ -370,10 +422,15 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
 
     def fire(self):
         if len(self.shot_weapons) < self.MAX_SHOTS:
-            new_buster = Buster_1(self)
-            # print(f"Firing buster id {id(new_buster)}!")
+            if self.charge_level < 15:
+                new_buster = Buster1(self, 1, [5,5], CN.YELLOW)
+            elif self.charge_level < 50:
+                new_buster = Buster1(self, 3, [10,5], CN.CYAN)
+            elif self.charge_level >= 50:
+                new_buster = Buster1(self, 10, [15,10], CN.GREEN)
             self.shot_weapons.append(new_buster)
             self.LEVEL.all_sprite_list.add(new_buster)
+            self.discharge()
 
     def stop(self):
         if not self.velocity_hold:
@@ -395,6 +452,29 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite):
         self.ducking = False
         self.change_rect(self.standing_image, self.standing_rect)
 
+    def damage(self, amount):
+        if self.taking_damage > 0:
+            return
+        self.health -= amount
+        if self.health <= 0:
+            self.die()
+        else:
+            self.x_velocity = self.STAGGER_VELOCITY *((-1)**['left','right'].index(self.direction))
+            self.y_velocity = (-1) * self.STAGGER_VELOCITY
+            self.velocity_hold = 10
+            self.on_ground = False
+            self.taking_damage = 8
+
+    def die(self):
+        self.x_velocity = 0
+        self.y_velocity = 0
+        self.kill()
+
+    def charge(self):
+        self.charge_level += 1
+
+    def discharge(self):
+        self.charge_level = 0
 
 class DashEcho(pygame.sprite.Sprite):
     def __init__(self, parent_player,x,y):

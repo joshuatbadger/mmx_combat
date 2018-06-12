@@ -3,6 +3,7 @@ import math
 import pygame
 
 import MMX_Combat.constants as CN
+from MMX_Combat.weapons import EnemyBuster1
 
 from abc import ABCMeta, abstractmethod
 
@@ -34,7 +35,8 @@ class BaseEnemy(pygame.sprite.Sprite):
 
     def attack(self, target):
         # TODO: Build out
-        print(f"Attacking {target.username}!")
+        # print(f"Attacking {target.username}!")
+        self.level.all_sprite_list.add(EnemyBuster1(self))
         self.waiting = 60
         pass
 
@@ -44,8 +46,9 @@ class BaseEnemy(pygame.sprite.Sprite):
             old_dist = 5000
             for player in self.level.players:
                 new_dist = math.hypot(player.rect.x - self.rect.x, player.rect.y - self.rect.y)
-                if new_dist <= 600 and new_dist < old_dist:
+                if new_dist <= CN.SCREEN_HREZ/2 and new_dist < old_dist:
                     self.target = player
+                    self.waiting = 60
         else:
             # Confirm the target is close enough to attack
             dist = math.hypot(self.target.rect.x - self.rect.x, self.target.rect.y - self.rect.y)

@@ -31,6 +31,18 @@ def get_all_remote_players():
     # TODO: Get information from remote people about their locations/states
     return []
 
+def get_proper_screen_size(w,h):
+    print(f'Resize Attempt width: {w}')
+    print(f'Resize Attempt height: {h}')
+    while float(w)/float(h) != CN.SCREEN_ASPECTRATIO:
+        if float(w)/float(h) > CN.SCREEN_ASPECTRATIO:
+            # too wide, base off of height
+            w = int(16*(float(h)/9))
+        else:
+            # too narrow, base off of width
+            h = int(9*(float(w)/16))
+    return w,h
+
 def start_game():
 
 
@@ -40,7 +52,8 @@ def start_game():
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
-    SCREEN = pygame.display.set_mode(CN.SCREEN_SIZE)
+    SCREEN = pygame.display.set_mode(CN.SCREEN_SIZE, pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE)
+    CAMERA_SCREEN = pygame.Surface(CN.SCREEN_REZ)
     pygame.display.set_caption("Testing input")
 
     BASICFONT = pygame.font.Font(None, CN.BASICFONTSIZE)
@@ -95,8 +108,8 @@ def start_game():
             local_player.duck()
         if cur_keys[pygame.K_SPACE] or jstick.get_button(0):
             local_player.jump()
-        # if cur_keys[pygame.K_LCTRL] or cur_keys[pygame.K_RCTRL] or jstick.get_button(2):
-        #     local_player.fire()
+        if cur_keys[pygame.K_LCTRL] or cur_keys[pygame.K_RCTRL] or jstick.get_button(2):
+            local_player.charge()
         if cur_keys[pygame.K_LSHIFT] or cur_keys[pygame.K_RSHIFT] or jstick.get_button(1):
             local_player.dash()
         if cur_keys[pygame.K_KP_MINUS] and CN.FPS > 1:
@@ -112,8 +125,12 @@ def start_game():
                 print("            Code status: {}".format("All good\n" if frame_update > longest_proc_frame else "Too heavy\n"))
                 sys.exit()
 
+            elif event.type == pygame.VIDEORESIZE:
+                print(f"Resizing to {event.dict['size']}!")
+                SCREEN = pygame.display.set_mode(get_proper_screen_size(*event.dict['size']), pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE)
+
             # Check for keys being released.
-            if event.type == pygame.KEYUP:
+            elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_LEFT and local_player.x_velocity < 0 and local_player.dashing < 0:
                     if not pygame.key.get_pressed()[pygame.K_RIGHT]:
                         local_player.stop()
@@ -128,52 +145,56 @@ def start_game():
                     local_player.standup()
                 if event.key == pygame.K_SPACE:
                     local_player.allow_jump()
-                if event.key == pygame.K_LSHIFT and not cur_keys[pygame.K_RSHIFT]:
+                if (event.key == pygame.K_LSHIFT and not cur_keys[pygame.K_RSHIFT]) or (event.key == pygame.K_RSHIFT and not cur_keys[pygame.K_LSHIFT]):
                     local_player.allow_dash()
-                if event.key == pygame.K_RSHIFT and not cur_keys[pygame.K_LSHIFT]:
-                    local_player.allow_dash()
+                if event.key == pygame.K_LCTRL and not cur_keys[pygame.K_RCTRL]:
+                    if local_player.charge_level > 2:
+                        local_player.fire()
 
             # Check for keys being pressed.
-            if event.type == pygame.KEYDOWN:
+            elif event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
                     local_player.fire()
 
-            if event.type == pygame.JOYBUTTONDOWN:
+            elif event.type == pygame.JOYBUTTONDOWN:
                 # print(f"Joystick button {event.button} pressed.")
                 if event.button == 2:
                     local_player.fire()
-            if event.type == pygame.JOYBUTTONUP:
+            elif event.type == pygame.JOYBUTTONUP:
                 # print(f"Joystick button {event.button} released.")
                 if event.button == 0:
                     local_player.allow_jump()
                 if event.button == 1:
                     local_player.allow_dash()
+                if event.button == 2:
+                    if local_player.charge_level > 5:
+                        local_player.fire()
+                    local_player.discharge()
 
-            # if (not pygame.key.get_pressed().get(pygame.K_LEFT, None) and not pygame.key.get_pressed().get(pygame.K_LEFT, None)) and local_player.dashing < 0:
-            # cur_pressed = set(pygame.key.get_pressed())
-            # if not set([pygame.K_LEFT, pygame.K_RIGHT]) & cur_pressed:
-            #     local_player.stop()
 
             # Now we check for whether the hat is being pressed/released
-            if event.type == pygame.JOYHATMOTION:
+            elif event.type == pygame.JOYHATMOTION:
                 if event.value[0] == 0:
                     local_player.stop()
                 if event.value[1] == 0:
                     local_player.standup()
 
-        SCREEN.fill(CN.BLACK)
+        CAMERA_SCREEN.fill(CN.BLACK)
 
         # Update info on all players
         proc_start_time = datetime.datetime.now()
-        player_camera.update(local_player)
+
         level.all_sprite_list.update()
+        player_camera.update(local_player)
         proc_end_time = (datetime.datetime.now() - proc_start_time).total_seconds()
         if proc_end_time > longest_proc_frame:
             longest_proc_frame = proc_end_time
 
         # Apply camera
         for s in level.all_sprite_list:
-            SCREEN.blit(s.image, player_camera.apply(s))
+            CAMERA_SCREEN.blit(s.image, player_camera.apply(s))
+
+        SCREEN.blit(pygame.transform.scale(CAMERA_SCREEN, [*SCREEN.get_size()], SCREEN), [0,0])
 
         # Display debug and/or controls
         if CN.DEBUG:

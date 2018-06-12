@@ -19,8 +19,8 @@ M                                                                               
 M                                                                                             M
 M                                                                                             M
 M                                 5                                                           M
-M        E                    XXXXXXXXXX                                                      M
-M                    3                              4                                         M
+M                             XXXXXXXXXX                                                      M
+M        E           3                              4                                         M
 M                XXXXXXXX                           X            E                            M
 M                                                   X                                         M
 M    1              2                               X                          6              M

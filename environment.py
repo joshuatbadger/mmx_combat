@@ -59,6 +59,7 @@ class TestLevel(Level):
             for y, line in enumerate(l):
                 for x, char in enumerate(line):
                     if char in ("M","X"):
+                        # TODO: Build fewer objects. I believe this is what's messing with some of the collisions
                         wall = BaseEnvironmentObj(x*CN.LEVEL_TILE_SIZE,y*CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE)
                         self.all_sprite_list.add(wall)
                         self.wall_list.add(wall)
@@ -76,7 +77,7 @@ class TestLevel(Level):
         self.build_enemies()
 
     def build_enemies(self):
-        print("I'm building my enemies now, yo.")
+        # print("I'm building my enemies now, yo.")
         for point in self.enemy_spawn_points:
             _ = BaseEnemy(*point, 40, 40, self, 3)
             self.all_sprite_list.add(_)
