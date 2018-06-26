@@ -20,6 +20,17 @@ YELLOW = 255,255,0
 CYAN = 0,255,255
 MAGENTA = 255,0,255
 
+COLOR_DICT = {
+              'BLACK': BLACK,
+              'WHITE': WHITE,
+              'RED': RED,
+              'GREEN': GREEN,
+              'BLUE': BLUE,
+              'YELLOW': YELLOW,
+              'CYAN': CYAN,
+              'MAGENTA': MAGENTA,
+             }
+
 
 # font stuff
 BASICFONTSIZE = 16
@@ -52,3 +63,9 @@ DASH_ECHOS = 3
 
 # level stuff
 LEVEL_TILE_SIZE = 40
+
+
+# server and network stuff
+
+DEFAULT_SERVER_IP = "127.0.0.1"
+DEFAULT_SERVER_PORT = 12000

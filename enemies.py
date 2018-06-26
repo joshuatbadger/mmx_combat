@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import os
 import math
 import pygame
@@ -21,24 +23,47 @@ class BaseEnemy(pygame.sprite.Sprite):
         self.rect = self.image.get_rect()
         self.rect.y = y
         self.rect.x = x
+        self.spawn_point = (x,y)
 
         self.health = health
         self.level = level
         self.waiting = 0
+        self.following = 0
         self.target = None
-        print("I'm a new enemy!")
+
+        self.x_velocity = 0
+        self.y_velocity = 0
+
+        self.collide_damage = 1
+        # print("I'm a new enemy!")
 
     def damage(self, amount):
-        print("Ouch!")
+        # print("Ouch!")
         self.health -= amount
         # pass
 
     def attack(self, target):
-        # TODO: Build out
         # print(f"Attacking {target.username}!")
         self.level.all_sprite_list.add(EnemyBuster1(self))
         self.waiting = 60
-        pass
+
+    def follow(self, target):
+        # TODO: Build out
+        # print(f"Following {target.username}!")
+        if self.following == 0:
+            self.following = 45
+        else:
+            self.following -=1
+
+        if self.following == 0:
+            self.waiting = 60
+        else:
+            hypot = math.hypot(self.target.rect.x - self.rect.x, self.target.rect.y - self.rect.y) / (CN.RUN_SPEED*.5)
+            if hypot == 0:
+                hypot = 1
+            self.x_velocity = ((self.target.rect.x + self.rect.width/2) - (self.rect.x + self.rect.width/2)) / hypot
+            self.y_velocity = ((self.target.rect.y + self.rect.height/2) - (self.rect.y + self.rect.height/2)) / hypot
+
 
     def patrol(self):
         if not self.target:
@@ -49,6 +74,8 @@ class BaseEnemy(pygame.sprite.Sprite):
                 if new_dist <= CN.SCREEN_HREZ/2 and new_dist < old_dist:
                     self.target = player
                     self.waiting = 60
+            # if not self.target:
+
         else:
             # Confirm the target is close enough to attack
             dist = math.hypot(self.target.rect.x - self.rect.x, self.target.rect.y - self.rect.y)
@@ -56,13 +83,16 @@ class BaseEnemy(pygame.sprite.Sprite):
                 self.target = None
             else:
                 # We're close enough, attack!
-                self.attack(self.target)
+                [self.attack, self.follow][datetime.now().time().microsecond % 2](self.target)
 
     def update(self):
-        # print(f"Updating enemy {id(self)}")
         if self.health <= 0:
             self.kill()
-        if not self.waiting:
+        if not self.following and not self.waiting:
             self.patrol()
-        else:
+        elif self.following:
+            self.follow(self.target)
+            self.rect.x += self.x_velocity
+            self.rect.y += self.y_velocity
+        elif self.waiting:
             self.waiting -=1

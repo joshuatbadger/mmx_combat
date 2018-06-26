@@ -3,23 +3,30 @@ import sys
 import pygame
 import datetime
 
+from MMX_Combat.network.client import get_remote_player_data
+
 def test():
     os.system("cls")
     print("Beginning the pygame test\n\n")
     print(f"pygame version: {pygame.__version__}")
     global USERNAME
 
-    # if DEBUG:
-    #     USERNAME = "Eclipse_JTB"
-    # else:
-    #     USERNAME = input("Username: ")
+    if CN.DEBUG:
+        USERNAME = "Eclipse_JTB"
+    else:
+        USERNAME = input("Username: ")
 
-    USERNAME = "Eclipse_JTB"
+    # USERNAME = "Eclipse_JTB"
     # for item in sorted(dir(pygame)):
     #     print(item)
 
+    prompt = ''
 
-    start_game()
+    while prompt not in CN.COLOR_DICT:
+        prompt = input("color: ").upper()
+
+
+    start_game(player_color=prompt)
 
 def make_text(text, color, bgcolor, top, left):
     textSurf = CN.BASICFONT.render(text, True, color, bgcolor)
@@ -27,13 +34,14 @@ def make_text(text, color, bgcolor, top, left):
     textRect.topleft = (top, left)
     return (textSurf, textRect)
 
-def get_all_remote_players():
-    # TODO: Get information from remote people about their locations/states
-    return []
+def get_all_remote_players(level):
+    global all_player_dict
+    all_player_dict = get_remote_player_data(dict(), level.server_addr)
+    return [k for k,v in all_player_dict.items()]
 
 def get_proper_screen_size(w,h):
-    print(f'Resize Attempt width: {w}')
-    print(f'Resize Attempt height: {h}')
+    # print(f'Resize Attempt width: {w}')
+    # print(f'Resize Attempt height: {h}')
     while float(w)/float(h) != CN.SCREEN_ASPECTRATIO:
         if float(w)/float(h) > CN.SCREEN_ASPECTRATIO:
             # too wide, base off of height
@@ -43,12 +51,15 @@ def get_proper_screen_size(w,h):
             h = int(9*(float(w)/16))
     return w,h
 
-def start_game():
+def start_game(player_color='BLUE'):
 
 
     from MMX_Combat.player import BasePlayerObj, LocalPlayerObj
     from MMX_Combat.environment import BaseEnvironmentObj, TestLevel
     from MMX_Combat.camera import Camera, complex_camera
+
+    global all_player_dict
+    all_player_dict = dict()
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
@@ -63,21 +74,21 @@ def start_game():
 
     attached_joysticks = pygame.joystick.get_count()
     if attached_joysticks:
-        print(f"Attached joysticks: {attached_joysticks}")
-        print("Getting first joystick")
+        # print(f"Attached joysticks: {attached_joysticks}")
+        # print("Getting first joystick")
         jstick = pygame.joystick.Joystick(0)
         jstick.init()
 
-    level = TestLevel()
+    level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT)
 
     all_players = []
 
-    local_player = LocalPlayerObj(USERNAME, level, jstick or None)
-    # local_player = LocalPlayerObj(USERNAME, level, jstick or None, {"MAX_SHOTS":2})
+    local_player = LocalPlayerObj(USERNAME, level, jstick or None, player_color)
+    # local_player = LocalPlayerObj(USERNAME, level, jstick or None, player_color, {"MAX_SHOTS":2})
     all_players.append(local_player)
 
-    for remote_player in get_all_remote_players():
-        all_players.append(remote_player)
+    # for remote_player in get_all_remote_players(level):
+    #     all_players.append(remote_player)
 
     for player in all_players:
         player.walls = level.wall_list
@@ -87,6 +98,8 @@ def start_game():
     longest_proc_frame = 0
 
     player_camera = Camera(complex_camera, level.width, level.height)
+
+    in_focus = True
 
     # main game loop
     while True:
@@ -125,8 +138,29 @@ def start_game():
                 print("            Code status: {}".format("All good\n" if frame_update > longest_proc_frame else "Too heavy\n"))
                 sys.exit()
 
+            # elif event.type == pygame.ACTIVEEVENT:
+            #     # print(event)
+            #     # print(event.state)
+            #     print('state:', event.state, '| gain:', event.gain,)
+            #     if event.state == 1:
+            #         if event.gain == 0:
+            #             print("| mouse out",)
+            #         elif event.gain == 1:
+            #             print("| mouse in",)
+            #     elif event.state == 2:
+            #         if event.gain == 0:
+            #             print("| titlebar pressed",)
+            #         elif event.gain == 1:
+            #             print("| titlebar unpressed",)
+            #     elif event.state == 6:
+            #         if event.gain == 0:
+            #             print("| window minimized",)
+            #     elif event.state == 4:
+            #         if event.gain == 1:
+            #             print("| window normal",)
+
             elif event.type == pygame.VIDEORESIZE:
-                print(f"Resizing to {event.dict['size']}!")
+                # print(f"Resizing to {event.dict['size']}!")
                 SCREEN = pygame.display.set_mode(get_proper_screen_size(*event.dict['size']), pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE)
 
             # Check for keys being released.
@@ -184,7 +218,11 @@ def start_game():
         # Update info on all players
         proc_start_time = datetime.datetime.now()
 
+        # all_player_dict = get_remote_player_data(all_player_dict, level.server_addr)
+
         level.all_sprite_list.update()
+        if local_player not in level.all_sprite_list:
+            local_player.update()
         player_camera.update(local_player)
         proc_end_time = (datetime.datetime.now() - proc_start_time).total_seconds()
         if proc_end_time > longest_proc_frame:
@@ -208,7 +246,7 @@ def start_game():
                 # print(k)
                 # print("\t" + str(type(v)))
                 if k != 'username' and not callable(v) and not k.startswith("_"):
-                    text_surf, text_rect = make_text("{}: {}".format(k,str(v)), CN.WHITE, CN.BLACK, 50, 10+(i*1.1*CN.BASICFONTSIZE))
+                    text_surf, text_rect = make_text("{}: {} ({})".format(k,str(v), type(v)), CN.WHITE, CN.BLACK, 50, 10+(i*1.1*CN.BASICFONTSIZE))
                     SCREEN.blit(text_surf, text_rect)
                     i += 1
         else:

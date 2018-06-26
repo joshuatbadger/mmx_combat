@@ -1,15 +1,22 @@
 from datetime import datetime
 
+import json
 import math
 import pygame
 
 
 from abc import ABCMeta, abstractmethod
+from .network.client import update_player_data
 from .weapons import Buster1
 
-import MMX_Combat.constants as CN
+from . import constants as CN
 
 class BasePlayerObj(metaclass=ABCMeta):
+    '''
+    Metaclass for essential methods (and some attributes, though they don't
+    inherit as an ABCMeta). At a minimum, expect all attributes listed here
+    to be passed back and forth between clients and server.
+    '''
     def __init__(self):
         # Initialize all player possible states
 
@@ -47,12 +54,13 @@ class BasePlayerObj(metaclass=ABCMeta):
     def update(self):
         pass
 
-    @abstractmethod
-    def _redraw(self):
-        pass
 
 class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
-    def __init__(self, username, level, jstick, pu_dict=None):
+    '''
+    Base class for local player objects. Inherits pygame Sprite, BasePlayerObj,
+    and python object.
+    '''
+    def __init__(self, username, level, jstick, color, pu_dict=None):
         super(BasePlayerObj, self).__init__()
         # Initialize all player possible states with real values
         self.on_ground = True
@@ -63,6 +71,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.wall_hold = False
         self.taking_damage = -1
         self.dead_wait = 0
+        self.invulnerable = 0
 
         # constants
         self.CAN_AIR_DASH = False
@@ -104,15 +113,15 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
         # Build collision rects and apply standing rectangle
         self.standing_image = pygame.Surface([CN.X_STANDING_HITBOX_W,CN.X_STANDING_HITBOX_H])
-        self.standing_image.fill(CN.BLUE)
+        self.standing_image.fill(CN.COLOR_DICT[color])
         self.standing_rect = self.standing_image.get_rect()
 
         self.ducking_image = pygame.Surface([CN.X_STANDING_HITBOX_W,CN.X_STANDING_HITBOX_W])
-        self.ducking_image.fill(CN.BLUE)
+        self.ducking_image.fill(CN.COLOR_DICT[color])
         self.ducking_rect = self.ducking_image.get_rect()
 
         self.dashing_image = pygame.Surface([CN.X_STANDING_HITBOX_H,CN.X_STANDING_HITBOX_W])
-        self.dashing_image.fill(CN.BLUE)
+        self.dashing_image.fill(CN.COLOR_DICT[color])
         self.dashing_rect = self.dashing_image.get_rect()
 
         self.image = self.standing_image
@@ -138,12 +147,17 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         # First make sure we're not dead, if so then wait a few seconds and then respawn
         # TODO: Implement this...
         if self.dead_wait:
+            if self.dead_wait == 1:
+                self.respawn()
             self.dead_wait -= 1
             return
 
         # If we're taking damage, reduce the countdown before we can regain control
         if self.taking_damage > 0:
             self.taking_damage -= 1
+
+        if self.invulnerable:
+            self.invulnerable -= 1
 
         # Get current key presses
         self._cur_keys = pygame.key.get_pressed()
@@ -222,13 +236,6 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             break
         dx -= self.rect.x
 
-        enemy_hit_list = pygame.sprite.spritecollide(self, self.LEVEL.npc_enemies, False)
-        for enemy in enemy_hit_list:
-            self.damage(1)
-            return
-
-
-
         dy = self.rect.y
 
         # Vertical motion
@@ -253,27 +260,48 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
                     self.can_jump = True
             break
 
+        if self.on_ground and self.taking_damage == 0:
+            self.taking_damage = -1
+
         dy -= self.rect.y
 
-        if CN.DEBUG and math.hypot(abs(dx),abs(dy)) > math.hypot(CN.RUN_SPEED, CN.JUMP_SPEED):
-            print("NEW UPDATE!!!!\n-----------------------------------------------------")
-            for k,v in sorted(self.__dict__.items()):
-                print(f'{k}: {v}')
-            print("-----------------------------------------------------\n")
+        # if CN.DEBUG and math.hypot(abs(dx),abs(dy)) > math.hypot(CN.RUN_SPEED, CN.JUMP_SPEED):
+        #     print("NEW UPDATE!!!!\n-----------------------------------------------------")
+        #     for k,v in sorted(self.__dict__.items()):
+        #         print(f'{k}: {v}')
+        #     print("-----------------------------------------------------\n")
 
-        enemy_hit_list = pygame.sprite.spritecollide(self, self.LEVEL.npc_enemies, False)
-        for enemy in enemy_hit_list:
-            self.damage(1)
-            return
+        if not self.invulnerable:
+            enemy_hit_list = pygame.sprite.spritecollide(self, self.LEVEL.npc_enemies, False)
+            for enemy in enemy_hit_list:
+                self.damage(enemy.collide_damage)
+                break
 
+        update_player_data(self._build_player_dict(), self.LEVEL.server_addr)
 
+    def _build_player_dict(self):
+        upload_dict = dict()
+        types = set()
+        for k,v in sorted(self.__dict__.items()):
+            if not callable(v) and not k.startswith("_") and isinstance(v, (bool, str, int)):
+                # print(f'{k}\n\t{v}\n\t{type(v)}')
+                upload_dict[k] = v
+                types.add(type(v))
+
+        upload_dict['x'] = self.rect.x
+        upload_dict['width'] = self.rect.width
+        upload_dict['y'] = self.rect.y
+        upload_dict['height'] = self.rect.height
+
+        # print(list(types))
+        # print("\n\n")
+
+        # print(json.dumps(upload_dict))
+        return upload_dict
 
     def _apply_powerups(self, pu_dict):
         for k,v in pu_dict.items():
             setattr(self, k, self.__dict__[k] + v)
-
-    def _redraw(self):
-        print(f"redrawing {self.username}")
 
     def _check_control_left(self):
         if self.jstick:
@@ -302,6 +330,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
     def calc_gravity(self):
         """Are we gravity-ing?"""
         if self.taking_damage > 0:
+            # print("currently taking damage, not gravity-ing")
             return
         if not (self._cur_keys[pygame.K_SPACE] or self.jstick.get_button(0)) and self.y_velocity < 0:
             # We've released space and are moving upwards. Stop moving upwards.
@@ -453,9 +482,10 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.change_rect(self.standing_image, self.standing_rect)
 
     def damage(self, amount):
-        if self.taking_damage > 0:
+        if self.invulnerable > 0:
             return
         self.health -= amount
+        self.change_rect(self.standing_image, self.standing_rect)
         if self.health <= 0:
             self.die()
         else:
@@ -464,17 +494,81 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             self.velocity_hold = 10
             self.on_ground = False
             self.taking_damage = 8
+            self.invulnerable = 45
 
     def die(self):
         self.x_velocity = 0
         self.y_velocity = 0
         self.kill()
+        self.dead_wait = 150
 
     def charge(self):
         self.charge_level += 1
 
     def discharge(self):
         self.charge_level = 0
+
+    def respawn(self):
+        self.image = self.standing_image
+        self.rect = self.standing_rect
+        self.rect.x, self.rect.y = self._get_spawnpoint()
+        self.LEVEL.all_sprite_list.add(self)
+
+
+class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
+    def __init__(self, username, level, color, pu_dict=None):
+        super(BasePlayerObj, self).__init__()
+        # Initialize all player possible states with real values
+        self.on_ground = True
+        self.run = False
+        self.ducking = False
+        self.dashing = -1
+        self.firing = False
+        self.wall_hold = False
+        self.taking_damage = -1
+        self.dead_wait = 0
+        self.invulnerable = 0
+
+        # constants
+        self.CAN_AIR_DASH = False
+        self.BASE_HEALTH = CN.BASE_HEALTH
+        self.LEVEL = level
+        self.GRAVITY = CN.GRAVITY
+        self.JUMP_SPEED = CN.JUMP_SPEED
+        self.RUN_SPEED = CN.RUN_SPEED
+        self.DASH_MULT = CN.DASH_MULT
+        self.DASH_TIME = CN.DASH_TIME
+        self.WALL_JUMP_VELOCITY_HOLD = CN.WALL_JUMP_VELOCITY_HOLD
+        self.WALL_DRAG_SPEED = CN.WALL_DRAG_SPEED
+        self.MAX_SHOTS = CN.MAX_SHOTS
+        self.STAGGER_VELOCITY = CN.STAGGER_VELOCITY
+        self.username = username
+
+        # Modify constants on first instantiation based on powerup dictionary
+        if pu_dict:
+            self._apply_powerups(pu_dict)
+
+        # variables
+
+        self.x_velocity = 0
+        self.y_velocity = 0
+        self.charge_level = 0
+        self.direction = 'right'
+        self.velocity_hold = 0
+        self.can_dash = True
+        self.can_jump = True
+        self.shot_weapons = []
+        self.health = self.BASE_HEALTH
+        self.wait_camera = False
+
+
+        self.image = pygame.Surface([CN.X_STANDING_HITBOX_W,CN.X_STANDING_HITBOX_H])
+        self.image.fill(CN.COLOR_DICT(color))
+        self.rect = self.image.get_rect()
+        self.rect.x, self.rect.y = (-800,-800)
+
+    def update(self):
+        global all_player_dict
 
 class DashEcho(pygame.sprite.Sprite):
     def __init__(self, parent_player,x,y):

@@ -1,5 +1,6 @@
 import os
 import pygame
+import more_itertools as mit
 
 import MMX_Combat.constants as CN
 
@@ -7,6 +8,14 @@ from MMX_Combat.enemies import BaseEnemy
 
 from abc import ABCMeta, abstractmethod
 
+def find_ranges(iterable):
+    """Yield range of consecutive numbers."""
+    for group in mit.consecutive_groups(iterable):
+        group = list(group)
+        if len(group) == 1:
+            yield group[0]
+        else:
+            yield group[0], group[-1]
 
 class BaseEnvironmentObj(pygame.sprite.Sprite):
     def __init__(self,x,y,width, height):
@@ -25,14 +34,23 @@ class BaseEnvironmentObj(pygame.sprite.Sprite):
     def damage(self, amount):
         pass
 
+class SpikeWall(BaseEnvironmentObj):
+    def __init__(self,x,y,width,height):
+        super().__init__(x,y,width,height)
+        self.image.fill(CN.RED)
+        self.collide_damage = 900
+
 class Level(object):
     """Generic Base Level class"""
-    def __init__(self):
+    def __init__(self, server_ip, server_port):
         self.wall_list = pygame.sprite.Group()
         self.misc_objs = pygame.sprite.Group()
         self.npc_enemies = pygame.sprite.Group()
         self.all_sprite_list = pygame.sprite.Group()
         self.players = pygame.sprite.Group()
+        self.spawn_points = []
+        self.enemy_spawn_points = []
+        self.server_addr = server_ip, server_port
 
     def update(self):
         self.wall_list.update()
@@ -45,36 +63,55 @@ class Level(object):
         self.misc_objs.draw(screen)
         self.all_sprite_list.draw(screen)
 
-class TestLevel(Level):
-    def __init__(self):
-        super().__init__()
-
-        self.spawn_points = []
-        self.enemy_spawn_points = []
-
-        level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_01.txt"))
-        print(level_path)
+    def build_level_objs(self, level_path):
+        wall_locations_v_lines = []
+        wall_locations_y_lines = []
         with open(level_path) as level:
             l = level.readlines()
             for y, line in enumerate(l):
                 for x, char in enumerate(line):
-                    if char in ("M","X"):
-                        # TODO: Build fewer objects. I believe this is what's messing with some of the collisions
-                        wall = BaseEnvironmentObj(x*CN.LEVEL_TILE_SIZE,y*CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE)
+                    if char in ("X","Y"):
+                        wall_locations_v_lines.append((x,y))
+                    elif char in ("<", ">", "^", "V"):
+                        wall = SpikeWall(x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE, CN.LEVEL_TILE_SIZE, CN.LEVEL_TILE_SIZE)
+                        self.npc_enemies.add(wall)
                         self.all_sprite_list.add(wall)
-                        self.wall_list.add(wall)
-
-                    if char in ("E"):
+                    elif char in ("E"):
                         self.enemy_spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
                     # Find spawn points (max 10 for now)
-                    if char in [str(c) for c in range(0,10)]:
+                    elif char in [str(c) for c in range(0,10)]:
                         # print(f"Found spawn point {char}!")
                         self.spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
 
-        # print([len(line)*CN.LEVEL_TILE_SIZE,len(l)*CN.LEVEL_TILE_SIZE])
-        self.width = len(line)*CN.LEVEL_TILE_SIZE
-        self.height = len(l)*CN.LEVEL_TILE_SIZE
-        self.build_enemies()
+            self.parse_walls(wall_locations_v_lines)
+
+            self.width = len(line)*CN.LEVEL_TILE_SIZE
+            self.height = len(l)*CN.LEVEL_TILE_SIZE
+        # self.build_enemies()
+
+    def parse_walls(self, wall_block_list):
+        wall_groups = dict()
+        for block in wall_block_list:
+            # wall_groups.get(block[1], []).append(block[0])
+            # print(block)
+            if wall_groups.get(block[0], None) == None:
+                wall_groups[block[0]] = []
+            wall_groups[block[0]].append(block[1])
+        # print(wall_groups)
+        wall_objs = dict()
+        for k,v in sorted(wall_groups.items()):
+            # print(k)
+            wall_objs[k] = list(find_ranges(v))
+            for b in wall_objs[k]:
+                # print(f"\t{b}")
+                if isinstance(b, int):
+                    wall = BaseEnvironmentObj(k*CN.LEVEL_TILE_SIZE,b*CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE)
+                else:
+                    wall = BaseEnvironmentObj(k*CN.LEVEL_TILE_SIZE,(b[0])*CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE,((b[1]-b[0]+1)*CN.LEVEL_TILE_SIZE))
+                self.all_sprite_list.add(wall)
+                self.wall_list.add(wall)
+
+        # print(wall_objs)
 
     def build_enemies(self):
         # print("I'm building my enemies now, yo.")
@@ -82,3 +119,10 @@ class TestLevel(Level):
             _ = BaseEnemy(*point, 40, 40, self, 3)
             self.all_sprite_list.add(_)
             self.npc_enemies.add(_)
+
+class TestLevel(Level):
+    def __init__(self, server_ip, server_port):
+        super().__init__(server_ip, server_port)
+        level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_02.txt"))
+        self.build_level_objs(level_path)
+        self.build_enemies()
