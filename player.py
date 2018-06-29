@@ -6,7 +6,7 @@ import pygame
 
 
 from abc import ABCMeta, abstractmethod
-from .network.client import update_player_data
+from .network.client import update_player_data, inform_disconnect
 from .weapons import Buster1
 
 from . import constants as CN
@@ -88,6 +88,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.STAGGER_VELOCITY = CN.STAGGER_VELOCITY
         self.username = username
         self.jstick = jstick
+        self.color = color
 
         # Modify constants on first instantiation based on powerup dictionary
         if pu_dict:
@@ -281,17 +282,17 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
     def _build_player_dict(self):
         upload_dict = dict()
-        types = set()
+        # types = set()
         for k,v in sorted(self.__dict__.items()):
             if not callable(v) and not k.startswith("_") and isinstance(v, (bool, str, int)):
                 # print(f'{k}\n\t{v}\n\t{type(v)}')
-                upload_dict[k] = v
-                types.add(type(v))
+                upload_dict[CN.TRANSFER_DICT.get(k, k)] = v
+                # types.add(type(v))
 
-        upload_dict['x'] = self.rect.x
-        upload_dict['width'] = self.rect.width
-        upload_dict['y'] = self.rect.y
-        upload_dict['height'] = self.rect.height
+        upload_dict[CN.TRANSFER_DICT['x']] = self.rect.x
+        upload_dict[CN.TRANSFER_DICT['width']] = self.rect.width
+        upload_dict[CN.TRANSFER_DICT['y']] = self.rect.y
+        upload_dict[CN.TRANSFER_DICT['height']] = self.rect.height
 
         # print(list(types))
         # print("\n\n")
@@ -516,7 +517,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
 
 class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
-    def __init__(self, username, level, color, pu_dict=None):
+    def __init__(self, username, level, color):
         super(BasePlayerObj, self).__init__()
         # Initialize all player possible states with real values
         self.on_ground = True
@@ -543,10 +544,7 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.MAX_SHOTS = CN.MAX_SHOTS
         self.STAGGER_VELOCITY = CN.STAGGER_VELOCITY
         self.username = username
-
-        # Modify constants on first instantiation based on powerup dictionary
-        if pu_dict:
-            self._apply_powerups(pu_dict)
+        self.color = color
 
         # variables
 
@@ -563,12 +561,32 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
 
         self.image = pygame.Surface([CN.X_STANDING_HITBOX_W,CN.X_STANDING_HITBOX_H])
-        self.image.fill(CN.COLOR_DICT(color))
+        self.image.fill(CN.COLOR_DICT[color])
         self.rect = self.image.get_rect()
         self.rect.x, self.rect.y = (-800,-800)
 
     def update(self):
-        global all_player_dict
+        all_player_dict = self.LEVEL.player_data
+        try:
+            my_player_dict = all_player_dict[self.username]
+        except KeyError:
+            inform_disconnect(self.username, self.LEVEL.server_addr)
+            self.kill()
+            return
+
+        # print(json.dumps(all_player_dict, indent=4, sort_keys=True))
+        for attr, v in my_player_dict['player_dict'].items():
+            if attr not in ('x', 'y', 'width', 'height'):
+                setattr(self, attr, v)
+        self.rect.x = my_player_dict['player_dict']['x']
+        self.rect.width = my_player_dict['player_dict']['width']
+        self.rect.y = my_player_dict['player_dict']['y']
+        self.rect.height = my_player_dict['player_dict']['height']
+        # TODO: Need to build in acks check, ie, is the data stale?
+
+    def _display_stats(self):
+        pass
+
 
 class DashEcho(pygame.sprite.Sprite):
     def __init__(self, parent_player,x,y):

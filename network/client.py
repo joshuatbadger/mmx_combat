@@ -5,7 +5,7 @@ import socket
 
 def update_player_data(player_dict, server_addr):
     msg_dict = {
-                'username': player_dict['username'],
+                'username': player_dict['un'],
                 'player_dict': player_dict,
                 'sending_update': True,
                }
@@ -15,22 +15,36 @@ def update_player_data(player_dict, server_addr):
     client_socket.settimeout(1.0/30)
     client_socket.sendto(b_msg, server_addr)
 
-def get_remote_player_data(remote_player_dict, server_addr):
+def get_remote_player_data(username, server_addr):
     msg_dict = {
-                'username': remote_player_dict['username'],
-                'update': True,
+                'username': username,
+                'get_update': True,
                }
+    b_msg = json.dumps(msg_dict).encode('utf-8')
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client_socket.settimeout(1.0)
+    client_socket.sendto(b_msg, server_addr)
+    try:
+        # Ensure buffer is large enough for data.
+        data, server = client_socket.recvfrom(1024*8)
+        remote_player_dict = json.loads(data)
+        return remote_player_dict
+    except socket.timeout:
+        print('REQUEST TIMED OUT')
+        # raise TimeoutException(f"{username}: timed out")
+
+
+
+def inform_disconnect(username, server_addr):
+    msg_dict = {
+                'username': username,
+                'disconnect': True,
+               }
+
     b_msg = json.dumps(msg_dict).encode('utf-8')
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client_socket.settimeout(1.0/30)
     client_socket.sendto(b_msg, server_addr)
-    try:
-        data, server = client_socket.recvfrom(1024)
-        remote_player_dict = json.loads(data)
-    except socket.timeout:
-        print('REQUEST TIMED OUT')
-
-    return remote_player_dict
 
 def test():
     username = input("What is your username? ")
@@ -61,6 +75,9 @@ def test():
             print(f'Received "{data}"" in {elapsed} seconds')
         except socket.timeout:
             print('REQUEST TIMED OUT')
+
+class TimeoutException(Exception):
+    pass
 
 if __name__ == "__main__":
     test()

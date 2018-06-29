@@ -58,6 +58,37 @@ STAGGER_VELOCITY = 5
 X_STANDING_HITBOX_W = 20
 X_STANDING_HITBOX_H = 42
 
+TRANSFER_DICT = {
+                    "BASE_HEALTH": 'B_H',
+                    "CAN_AIR_DASH": 'C_A_D',
+                    "DASH_MULT": 'D_M',
+                    "DASH_TIME": 'D_T',
+                    "GRAVITY": 'G',
+                    "JUMP_SPEED": "J_S",
+                    "MAX_SHOTS": 'M_S',
+                    "RUN_SPEED": 'R_S',
+                    "STAGGER_VELOCITY": 'S_V',
+                    "WALL_DRAG_SPEED": 'W_D_S',
+                    "WALL_JUMP_VELOCITY_HOLD": 'W_J_V',
+                    "can_dash": 'c_d',
+                    "can_jump": 'c_j',
+                    "charge_level": 'c_l',
+                    "dead_wait": 'd_w',
+                    "direction": "dir",
+                    "health": 'hp',
+                    "invulnerable": 'inv',
+                    "on_ground": 'o_g',
+                    "taking_damage": 't_d',
+                    "username": "un",
+                    "velocity_hold": 'v_h',
+                    "wait_camera": 'w_c',
+                    "wall_hold": 'w_h',
+                    "x_velocity": 'x_v',
+                    "y_velocity": 'y_v',
+                }
+
+REC_DICT = {v: k for k,v in TRANSFER_DICT.items()}
+
 DASH_ECHOS = 3
 
 

@@ -1,10 +1,15 @@
 import os
+import sys
+import json
 import pygame
+import traceback
 import more_itertools as mit
 
 import MMX_Combat.constants as CN
 
 from MMX_Combat.enemies import BaseEnemy
+from MMX_Combat.player import RemotePlayerObj
+from MMX_Combat.network.client import get_remote_player_data
 
 from abc import ABCMeta, abstractmethod
 
@@ -48,9 +53,11 @@ class Level(object):
         self.npc_enemies = pygame.sprite.Group()
         self.all_sprite_list = pygame.sprite.Group()
         self.players = pygame.sprite.Group()
+        self.player_names = []
         self.spawn_points = []
         self.enemy_spawn_points = []
         self.server_addr = server_ip, server_port
+        self.player_data = dict()
 
     def update(self):
         self.wall_list.update()
@@ -83,13 +90,13 @@ class Level(object):
                         # print(f"Found spawn point {char}!")
                         self.spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
 
-            self.parse_walls(wall_locations_v_lines)
+            self._parse_walls(wall_locations_v_lines)
 
             self.width = len(line)*CN.LEVEL_TILE_SIZE
             self.height = len(l)*CN.LEVEL_TILE_SIZE
         # self.build_enemies()
 
-    def parse_walls(self, wall_block_list):
+    def _parse_walls(self, wall_block_list):
         wall_groups = dict()
         for block in wall_block_list:
             # wall_groups.get(block[1], []).append(block[0])
@@ -119,6 +126,26 @@ class Level(object):
             _ = BaseEnemy(*point, 40, 40, self, 3)
             self.all_sprite_list.add(_)
             self.npc_enemies.add(_)
+
+    def update_player_data(self, username):
+        # print("Updating....")
+        try:
+            self.player_data = get_remote_player_data(username, self.server_addr)
+        except Exception as e:
+            print(traceback.format_exc())
+            print('')
+            pass
+
+        for player_name, player_data in self.player_data.items():
+            if player_name not in self.player_names:
+                self.player_names.append(player_name)
+                remote_player = RemotePlayerObj(player_data['username'], self, player_data['player_dict']['color'])
+                self.players.add(remote_player)
+                self.all_sprite_list.add(remote_player)
+
+        # os.system("cls")
+        # print(json.dumps(self.player_data, sort_keys=True, indent=4))
+
 
 class TestLevel(Level):
     def __init__(self, server_ip, server_port):

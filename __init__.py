@@ -3,7 +3,7 @@ import sys
 import pygame
 import datetime
 
-from MMX_Combat.network.client import get_remote_player_data
+from MMX_Combat.network.client import get_remote_player_data, inform_disconnect
 
 def test():
     os.system("cls")
@@ -34,10 +34,6 @@ def make_text(text, color, bgcolor, top, left):
     textRect.topleft = (top, left)
     return (textSurf, textRect)
 
-def get_all_remote_players(level):
-    global all_player_dict
-    all_player_dict = get_remote_player_data(dict(), level.server_addr)
-    return [k for k,v in all_player_dict.items()]
 
 def get_proper_screen_size(w,h):
     # print(f'Resize Attempt width: {w}')
@@ -57,9 +53,6 @@ def start_game(player_color='BLUE'):
     from MMX_Combat.player import BasePlayerObj, LocalPlayerObj
     from MMX_Combat.environment import BaseEnvironmentObj, TestLevel
     from MMX_Combat.camera import Camera, complex_camera
-
-    global all_player_dict
-    all_player_dict = dict()
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
@@ -86,6 +79,8 @@ def start_game(player_color='BLUE'):
     local_player = LocalPlayerObj(USERNAME, level, jstick or None, player_color)
     # local_player = LocalPlayerObj(USERNAME, level, jstick or None, player_color, {"MAX_SHOTS":2})
     all_players.append(local_player)
+
+    level.player_names.append(USERNAME)
 
     # for remote_player in get_all_remote_players(level):
     #     all_players.append(remote_player)
@@ -131,6 +126,7 @@ def start_game(player_color='BLUE'):
             CN.FPS += 1
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                inform_disconnect(USERNAME, level.server_addr)
                 print(f"  Longest frame process: {longest_proc_frame} seconds")
                 frame_update = 1.0/CN.FPS
                 print(f"Single frame update max: {frame_update} seconds")
@@ -218,11 +214,14 @@ def start_game(player_color='BLUE'):
         # Update info on all players
         proc_start_time = datetime.datetime.now()
 
-        # all_player_dict = get_remote_player_data(all_player_dict, level.server_addr)
+        level.update_player_data(local_player.username)
+        # TODO: check for conflicts between local_player local data and server data
 
-        level.all_sprite_list.update()
         if local_player not in level.all_sprite_list:
             local_player.update()
+
+        level.all_sprite_list.update()
+
         player_camera.update(local_player)
         proc_end_time = (datetime.datetime.now() - proc_start_time).total_seconds()
         if proc_end_time > longest_proc_frame:

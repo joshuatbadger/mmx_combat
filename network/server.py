@@ -51,27 +51,40 @@ def main():
         running = True
         times = 0
         current_player_set = dict()
+        ret_message = ''
         # while running:
         while times < 5:
+            os.system('cls')
             rec_message, address = server_socket.recvfrom(1024)
             message_dict = json.loads(rec_message.decode('utf-8'))
-            print(f"Received data from {message_dict['username']} at {address}")
+            username = message_dict['username']
+            message_dict.pop(username, False)
+            # print(f"Received data from {message_dict['username']} at {address}")
             # print(f"\t{message_dict.get('check_server', None)}")
             if message_dict.get('check_server', False):
                 ret_message = json.dumps({'server_address': server_ip}).encode('utf-8')
                 server_socket.sendto(ret_message, address)
             elif message_dict.get('sending_update', False):
-                # print(f"{message_dict['username']} is sending me info!")
+                # print(f"{username} is sending me info!")
+                message_dict.pop('sending_update')
                 current_player_set[message_dict['username']] = message_dict
             elif message_dict.get('get_update', False):
-                # print(f"{message_dict['username']} wants an update!")
+                # print(f"{username} wants an update!")
                 ret_message = json.dumps(current_player_set).encode('utf-8')
                 server_socket.sendto(ret_message, address)
+            elif message_dict.get('disconnect', False):
+                print(f"Player {username} has disconnected")
+                current_player_set.pop(message_dict['username'])
             else:
-                current_player_set[message_dict['username']] = message_dict
+                current_player_set[username] = message_dict
                 ret_message = json.dumps(current_player_set).encode('utf-8')
                 server_socket.sendto(ret_message, address)
             # print(f'returning message "{ret_message}"...')
+
+            # print(f'Current players: {sorted(current_player_set.keys())}')
+
+            # print(len(ret_message))
+            # print(json.dumps(current_player_set, sort_keys=True, indent=4))
 
             # times += 1
     except KeyboardInterrupt:
