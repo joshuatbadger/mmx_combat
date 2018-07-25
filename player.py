@@ -6,7 +6,6 @@ import pygame
 
 
 from abc import ABCMeta, abstractmethod
-from .network.client import update_player_data, inform_disconnect
 from .weapons import Buster1
 
 from . import constants as CN
@@ -110,7 +109,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
         # Initialize current key presses and controller dpad positions
         self._cur_keys = pygame.key.get_pressed()
-        self.cur_hat = jstick.get_hat(0) or None
+        self._cur_hat = self.jstick.get_hat(0)
 
         # Build collision rects and apply standing rectangle
         self.standing_image = pygame.Surface([CN.X_STANDING_HITBOX_W,CN.X_STANDING_HITBOX_H])
@@ -162,10 +161,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
         # Get current key presses
         self._cur_keys = pygame.key.get_pressed()
-        if self.jstick:
-            self.cur_hat = self.jstick.get_hat(0)
-        else:
-            self.cur_hat = (0,0)
+        self._cur_hat = self.jstick.get_hat(0)
+
         # Apply gravity
         self.calc_gravity()
 
@@ -210,7 +207,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
                 self.go_right()
             elif self._check_control_left():
                 self.go_left()
-            if not self._cur_keys[pygame.K_LSHIFT] and not self._cur_keys[pygame.K_RSHIFT] and not self.jstick.get_button(1):
+            if not self._check_control_dash():
                 self.dashing = -1
         elif self.dashing == -1 and not self.ducking:
             self.change_rect(self.standing_image, self.standing_rect)
@@ -257,7 +254,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
                 self.wall_hold = False
                 if self.taking_damage == 0:
                     self.taking_damage = -1
-                if not (self._cur_keys[pygame.K_SPACE] or self.jstick.get_button(0)):
+                if not self._check_control_jump():
                     self.can_jump = True
             break
 
@@ -278,26 +275,23 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
                 self.damage(enemy.collide_damage)
                 break
 
-        update_player_data(self._build_player_dict(), self.LEVEL.server_addr)
+        self.LEVEL.chat_client.send_update_to_server(self._build_player_dict())
+        # self.LEVEL.chat_client.send_update_to_server({'un': self.username, 'data': 24})
+        self.LEVEL.chat_client.Loop()
 
     def _build_player_dict(self):
         upload_dict = dict()
         # types = set()
         for k,v in sorted(self.__dict__.items()):
+            # Only send strings, booleans, and integers on obvious params. No hidden ones (usually start with "_")
             if not callable(v) and not k.startswith("_") and isinstance(v, (bool, str, int)):
-                # print(f'{k}\n\t{v}\n\t{type(v)}')
                 upload_dict[CN.TRANSFER_DICT.get(k, k)] = v
-                # types.add(type(v))
 
-        upload_dict[CN.TRANSFER_DICT['x']] = self.rect.x
-        upload_dict[CN.TRANSFER_DICT['width']] = self.rect.width
-        upload_dict[CN.TRANSFER_DICT['y']] = self.rect.y
-        upload_dict[CN.TRANSFER_DICT['height']] = self.rect.height
+        upload_dict[CN.TRANSFER_DICT.get('x', 'x')] = self.rect.x
+        upload_dict[CN.TRANSFER_DICT.get('width', 'width')] = self.rect.width
+        upload_dict[CN.TRANSFER_DICT.get('y', 'y')] = self.rect.y
+        upload_dict[CN.TRANSFER_DICT.get('height', 'height')] = self.rect.height
 
-        # print(list(types))
-        # print("\n\n")
-
-        # print(json.dumps(upload_dict))
         return upload_dict
 
     def _apply_powerups(self, pu_dict):
@@ -305,35 +299,32 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             setattr(self, k, self.__dict__[k] + v)
 
     def _check_control_left(self):
-        if self.jstick:
-            return self.jstick.get_hat(0)[0] == -1 or self._cur_keys[pygame.K_LEFT]
-        else:
-            return self._cur_keys[pygame.K_LEFT]
+        return self.jstick.get_hat(0)[0] == -1 or self._cur_keys[pygame.K_LEFT]
 
     def _check_control_right(self):
-        if self.jstick:
-            return self.jstick.get_hat(0)[0] == 1 or self._cur_keys[pygame.K_RIGHT]
-        else:
-            return self._cur_keys[pygame.K_RIGHT]
+        return self.jstick.get_hat(0)[0] == 1 or self._cur_keys[pygame.K_RIGHT]
 
     def _check_control_down(self):
-        if self.jstick:
-            return self.jstick.get_hat(0)[1] == -1 or self._cur_keys[pygame.K_DOWN]
-        else:
-            return self._cur_keys[pygame.K_DOWN]
+        return self.jstick.get_hat(0)[1] == -1 or self._cur_keys[pygame.K_DOWN]
 
     def _check_control_up(self):
-        if self.jstick:
-            return self.jstick.get_hat(0)[1] == 1 or self._cur_keys[pygame.K_UP]
-        else:
-            return self._cur_keys[pygame.K_UP]
+        return self.jstick.get_hat(0)[1] == 1 or self._cur_keys[pygame.K_UP]
+
+    def _check_control_jump(self):
+        return self._cur_keys[pygame.K_SPACE] or self.jstick.get_button(0)
+
+    def _check_control_dash(self):
+        return self._cur_keys[pygame.K_LSHIFT] or self._cur_keys[pygame.K_RSHIFT] or self.jstick.get_button(1)
+
+    def _check_control_fire(self):
+        return self._cur_keys[pygame.K_LCTRL] or self._cur_keys[pygame.K_RCTRL] or self.jstick.get_button(2)
 
     def calc_gravity(self):
         """Are we gravity-ing?"""
         if self.taking_damage > 0:
             # print("currently taking damage, not gravity-ing")
             return
-        if not (self._cur_keys[pygame.K_SPACE] or self.jstick.get_button(0)) and self.y_velocity < 0:
+        if not self._check_control_jump() and self.y_velocity < 0:
             # We've released space and are moving upwards. Stop moving upwards.
             self.can_dash = self.CAN_AIR_DASH
             self.y_velocity = 0
@@ -404,7 +395,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             self.velocity_hold = self.WALL_JUMP_VELOCITY_HOLD
 
             # Build x velocity below, but first check for dashability
-            dash = bool((self._cur_keys[pygame.K_LSHIFT] or self._cur_keys[pygame.K_RSHIFT] or self.jstick.get_button(1)) and self.can_dash)
+            dash = bool(self._check_control_jump() and self.can_dash)
             # print(f"dash? {dash}")
             if dash:
                 self.dashing = 0
@@ -565,26 +556,32 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.rect = self.image.get_rect()
         self.rect.x, self.rect.y = (-800,-800)
 
+        print(f"Instantiating new remote player {self.username}!")
+
     def update(self):
         all_player_dict = self.LEVEL.player_data
+        # print(f"Updating {self.username}")
         try:
             my_player_dict = all_player_dict[self.username]
         except KeyError:
-            inform_disconnect(self.username, self.LEVEL.server_addr)
+            print(f"Oops, {self.username} is gone!")
             self.kill()
             return
 
-        # print(json.dumps(all_player_dict, indent=4, sort_keys=True))
-        for attr, v in my_player_dict['player_dict'].items():
+        # print(json.dumps(my_player_dict, indent=4, sort_keys=True))
+        for attr, v in my_player_dict.items():
             if attr not in ('x', 'y', 'width', 'height'):
                 setattr(self, attr, v)
-        self.rect.x = my_player_dict['player_dict']['x']
-        self.rect.width = my_player_dict['player_dict']['width']
-        self.rect.y = my_player_dict['player_dict']['y']
-        self.rect.height = my_player_dict['player_dict']['height']
+        self.rect.x = my_player_dict['x']
+        self.rect.width = my_player_dict['width']
+        self.rect.y = my_player_dict['y']
+        self.rect.height = my_player_dict['height']
         # TODO: Need to build in acks check, ie, is the data stale?
 
     def _display_stats(self):
+        pass
+
+    def damage(self, amt):
         pass
 
 
@@ -605,3 +602,13 @@ class DashEcho(pygame.sprite.Sprite):
             self.image.kill()
         else:
             self.image.fill((*BLUE,self.rem_frames*70))
+
+class DummyJoystick:
+    def __init__(self):
+        print("Dummy joystick, dawg.")
+
+    def get_hat(self, hat_id):
+        return (0,0)
+
+    def get_button(self, button_id):
+        return 0

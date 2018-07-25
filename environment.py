@@ -9,7 +9,7 @@ import MMX_Combat.constants as CN
 
 from MMX_Combat.enemies import BaseEnemy
 from MMX_Combat.player import RemotePlayerObj
-from MMX_Combat.network.client import get_remote_player_data
+from MMX_Combat.network.client import MMXClient
 
 from abc import ABCMeta, abstractmethod
 
@@ -47,17 +47,21 @@ class SpikeWall(BaseEnvironmentObj):
 
 class Level(object):
     """Generic Base Level class"""
-    def __init__(self, server_ip, server_port):
+    def __init__(self, server_ip, server_port, username):
         self.wall_list = pygame.sprite.Group()
         self.misc_objs = pygame.sprite.Group()
         self.npc_enemies = pygame.sprite.Group()
         self.all_sprite_list = pygame.sprite.Group()
         self.players = pygame.sprite.Group()
-        self.player_names = []
+        self.player_names = set()
         self.spawn_points = []
         self.enemy_spawn_points = []
         self.server_addr = server_ip, server_port
         self.player_data = dict()
+        self.chat_client = MMXClient(*self.server_addr, username, self )
+
+    def print_data_cache(self):
+        print(json.dumps(self.player_data, indent=4))
 
     def update(self):
         self.wall_list.update()
@@ -128,28 +132,24 @@ class Level(object):
             self.npc_enemies.add(_)
 
     def update_player_data(self, username):
-        # print("Updating....")
-        try:
-            self.player_data = get_remote_player_data(username, self.server_addr)
-        except Exception as e:
-            print(traceback.format_exc())
-            print('')
-            pass
-
+        # print(self.player_data.keys())
         for player_name, player_data in self.player_data.items():
-            if player_name not in self.player_names:
-                self.player_names.append(player_name)
-                remote_player = RemotePlayerObj(player_data['username'], self, player_data['player_dict']['color'])
-                self.players.add(remote_player)
-                self.all_sprite_list.add(remote_player)
+            # print(player_name)
+            try:
+                if player_name not in self.player_names:
+                    self.player_names.add(player_name)
+                    print(f'{player_name} connected')
+                    remote_player = RemotePlayerObj(player_data['un'], self, player_data['color'])
+                    self.players.add(remote_player)
+                    self.all_sprite_list.add(remote_player)
+            except:
+                print(traceback.format_exc())
 
-        # os.system("cls")
-        # print(json.dumps(self.player_data, sort_keys=True, indent=4))
 
 
 class TestLevel(Level):
-    def __init__(self, server_ip, server_port):
-        super().__init__(server_ip, server_port)
+    def __init__(self, server_ip, server_port, username):
+        super().__init__(server_ip, server_port, username)
         level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_02.txt"))
         self.build_level_objs(level_path)
         self.build_enemies()

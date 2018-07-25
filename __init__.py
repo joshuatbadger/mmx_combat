@@ -1,9 +1,14 @@
 import os
 import sys
-import pygame
+os.environ["PYTHONDONTWRITEBYTECODE"] = 'stobbit'
+
 import datetime
 
-from MMX_Combat.network.client import get_remote_player_data, inform_disconnect
+try:
+    import pygame
+except ImportError as e:
+    print("Can't import `pygame`. Did you remember to activate the virtual environment?")
+    sys.exit(5)
 
 def test():
     os.system("cls")
@@ -23,10 +28,10 @@ def test():
     prompt = ''
 
     while prompt not in CN.COLOR_DICT:
-        prompt = input("color: ").upper()
+        prompt = input("player color: ").upper()
 
 
-    start_game(player_color=prompt)
+    start_game(USERNAME, player_color=prompt)
 
 def make_text(text, color, bgcolor, top, left):
     textSurf = CN.BASICFONT.render(text, True, color, bgcolor)
@@ -47,10 +52,10 @@ def get_proper_screen_size(w,h):
             h = int(9*(float(w)/16))
     return w,h
 
-def start_game(player_color='BLUE'):
+def start_game(player_name, player_color='BLUE'):
 
 
-    from MMX_Combat.player import BasePlayerObj, LocalPlayerObj
+    from MMX_Combat.player import BasePlayerObj, LocalPlayerObj, DummyJoystick
     from MMX_Combat.environment import BaseEnvironmentObj, TestLevel
     from MMX_Combat.camera import Camera, complex_camera
 
@@ -58,7 +63,7 @@ def start_game(player_color='BLUE'):
     FPSCLOCK = pygame.time.Clock()
     SCREEN = pygame.display.set_mode(CN.SCREEN_SIZE, pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE)
     CAMERA_SCREEN = pygame.Surface(CN.SCREEN_REZ)
-    pygame.display.set_caption("Testing input")
+    pygame.display.set_caption(f'MMX Combat: {USERNAME}')
 
     BASICFONT = pygame.font.Font(None, CN.BASICFONTSIZE)
 
@@ -71,16 +76,18 @@ def start_game(player_color='BLUE'):
         # print("Getting first joystick")
         jstick = pygame.joystick.Joystick(0)
         jstick.init()
+    else:
+        jstick = DummyJoystick()
 
-    level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT)
+    level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, USERNAME)
 
     all_players = []
 
-    local_player = LocalPlayerObj(USERNAME, level, jstick or None, player_color)
-    # local_player = LocalPlayerObj(USERNAME, level, jstick or None, player_color, {"MAX_SHOTS":2})
+    local_player = LocalPlayerObj(USERNAME, level, jstick, player_color)
+    # local_player = LocalPlayerObj(USERNAME, level, jstick, player_color, {"MAX_SHOTS":2})
     all_players.append(local_player)
 
-    level.player_names.append(USERNAME)
+    level.player_names.add(USERNAME)
 
     # for remote_player in get_all_remote_players(level):
     #     all_players.append(remote_player)
@@ -112,13 +119,13 @@ def start_game(player_color='BLUE'):
             local_player.stop()
 
 
-        if cur_keys[pygame.K_DOWN] or cur_hat[1] == -1:
+        if local_player._check_control_down():
             local_player.duck()
-        if cur_keys[pygame.K_SPACE] or jstick.get_button(0):
+        if local_player._check_control_jump():
             local_player.jump()
-        if cur_keys[pygame.K_LCTRL] or cur_keys[pygame.K_RCTRL] or jstick.get_button(2):
+        if local_player._check_control_fire():
             local_player.charge()
-        if cur_keys[pygame.K_LSHIFT] or cur_keys[pygame.K_RSHIFT] or jstick.get_button(1):
+        if local_player._check_control_dash():
             local_player.dash()
         if cur_keys[pygame.K_KP_MINUS] and CN.FPS > 1:
             CN.FPS -= 1
@@ -126,7 +133,6 @@ def start_game(player_color='BLUE'):
             CN.FPS += 1
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                inform_disconnect(USERNAME, level.server_addr)
                 print(f"  Longest frame process: {longest_proc_frame} seconds")
                 frame_update = 1.0/CN.FPS
                 print(f"Single frame update max: {frame_update} seconds")
@@ -185,6 +191,8 @@ def start_game(player_color='BLUE'):
             elif event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
                     local_player.fire()
+                elif event.key == pygame.K_i:
+                    level.print_data_cache()
 
             elif event.type == pygame.JOYBUTTONDOWN:
                 # print(f"Joystick button {event.button} pressed.")
@@ -252,7 +260,9 @@ def start_game(player_color='BLUE'):
             text = """Controls:
                     Movement: Arrow Keys or Controller D-Pad
                     Jump: Spacebar or bottom Controller button (X)
-                    Dash: Shift or right Controller button (O)"""
+                    Dash: Shift or right Controller button (O)
+                    Fire: Control or left Controller button ([])
+                    """
             for i, line in enumerate(text.split("\n")):
                 text_surf, text_rect = make_text(line.replace("    ", ""), CN.WHITE, CN.BLACK, 50, 10+(i*1.1*CN.BASICFONTSIZE))
                 SCREEN.blit(text_surf, text_rect)
@@ -263,6 +273,7 @@ def start_game(player_color='BLUE'):
 
 
 if __name__ == "__main__":
+
     mmx_main_path = os.path.normpath(os.path.join(os.path.realpath(__file__), "..", ".."))
     if mmx_main_path not in sys.path:
         sys.path.append(mmx_main_path)

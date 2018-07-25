@@ -58,6 +58,7 @@ STAGGER_VELOCITY = 5
 X_STANDING_HITBOX_W = 20
 X_STANDING_HITBOX_H = 42
 
+# reduce key length for more efficient transfers to the server. Universal across the board.
 TRANSFER_DICT = {
                     "BASE_HEALTH": 'B_H',
                     "CAN_AIR_DASH": 'C_A_D',
@@ -98,5 +99,5 @@ LEVEL_TILE_SIZE = 40
 
 # server and network stuff
 
-DEFAULT_SERVER_IP = "127.0.0.1"
+DEFAULT_SERVER_IP = "localhost"
 DEFAULT_SERVER_PORT = 12000

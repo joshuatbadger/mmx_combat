@@ -1,14 +1,13 @@
 import os
-import sys
+os.environ["PYTHONDONTWRITEBYTECODE"] = 'stobbit'
 import json
-import random
 import socket
 
-# Code largely copied from https://stackoverflow.com/a/27893987
+from time import sleep
+from weakref import WeakKeyDictionary
 
-# Create a UDP socket
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server_socket.bind(('', 12000))
+from PodSixNet.Channel import Channel
+from PodSixNet.Server import Server
 
 if os.name != "nt":
     import fcntl
@@ -41,56 +40,68 @@ def get_lan_ip():
                 pass
     return ip
 
-def main():
-    os.system('cls')
+class MMXClientChannel(Channel):
 
-    server_ip = get_lan_ip()
+    def Close(self):
+        self._server.DelPlayer(self)
 
-    try:
-        print("Starting server...")
-        running = True
-        times = 0
-        current_player_set = dict()
-        ret_message = ''
-        # while running:
-        while times < 5:
-            os.system('cls')
-            rec_message, address = server_socket.recvfrom(1024)
-            message_dict = json.loads(rec_message.decode('utf-8'))
-            username = message_dict['username']
-            message_dict.pop(username, False)
-            # print(f"Received data from {message_dict['username']} at {address}")
-            # print(f"\t{message_dict.get('check_server', None)}")
-            if message_dict.get('check_server', False):
-                ret_message = json.dumps({'server_address': server_ip}).encode('utf-8')
-                server_socket.sendto(ret_message, address)
-            elif message_dict.get('sending_update', False):
-                # print(f"{username} is sending me info!")
-                message_dict.pop('sending_update')
-                current_player_set[message_dict['username']] = message_dict
-            elif message_dict.get('get_update', False):
-                # print(f"{username} wants an update!")
-                ret_message = json.dumps(current_player_set).encode('utf-8')
-                server_socket.sendto(ret_message, address)
-            elif message_dict.get('disconnect', False):
-                print(f"Player {username} has disconnected")
-                current_player_set.pop(message_dict['username'])
-            else:
-                current_player_set[username] = message_dict
-                ret_message = json.dumps(current_player_set).encode('utf-8')
-                server_socket.sendto(ret_message, address)
-            # print(f'returning message "{ret_message}"...')
+    def Network(self, data):
+        # print(f"I think I got some data:\n{data}\n")
+        pass
 
-            # print(f'Current players: {sorted(current_player_set.keys())}')
+    def Network_updateclient(self, data):
+        print(f"Client wants me send them stuff!\n{data}")
+        self._server.SendToAll()
 
-            # print(len(ret_message))
-            # print(json.dumps(current_player_set, sort_keys=True, indent=4))
+    def Network_updateserver(self, data):
+        # print(f"Client wants me to do something!")
+        self._server.UpdateData(data)
+        self._server.SendToAll()
 
-            # times += 1
-    except KeyboardInterrupt:
-        print("Quitting server...")
-        sys.exit()
+    def Network_newconnection(self, data):
+        print(f"I have a new connection! (channel level)\n{data}")
+        self.username = data['un']
+
+class MMXServer(Server):
+
+    channelClass = MMXClientChannel
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.data_cache = dict()
+        self.players = WeakKeyDictionary()
+
+    def Connected(self, channel, addr):
+        print(f"We have a new connection from {addr}! (server level)")
+        self.AddPlayer(channel)
+
+    def AddPlayer(self, player):
+        print("New Player" + str(player.addr))
+        self.players[player] = True
+
+    def DelPlayer(self, player):
+        print("Deleting Player" + str(player.addr))
+        del self.data_cache[player.username]
+        del self.players[player]
+
+    def UpdateData(self, data):
+        try:
+            self.data_cache[data['un']] = data['data']
+            # print(self.data_cache)
+        except:
+            print("Something broke in update data!")
+
+    def SendToAll(self):
+        # print("Current data_cache: ")
+        # print(self.data_cache)
+        [p.Send({'action': 'updatefromserver', 'data': self.data_cache}) for p in self.players]
+
 
 
 if __name__ == '__main__':
-    main()
+    os.system("cls")
+    server = MMXServer(localaddr=('localhost', 12000))
+    print(server)
+    while True:
+        server.Pump()
+        sleep(0.0001)
