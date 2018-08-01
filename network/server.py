@@ -1,6 +1,8 @@
 import os
 os.environ["PYTHONDONTWRITEBYTECODE"] = 'stobbit'
+import sys
 import json
+import pygame
 import socket
 
 from time import sleep
@@ -8,6 +10,11 @@ from weakref import WeakKeyDictionary
 
 from PodSixNet.Channel import Channel
 from PodSixNet.Server import Server
+
+try:
+    from .. import environment
+except (ValueError, ImportError):
+    print("Server couldn't import.... try importing explicitly")
 
 if os.name != "nt":
     import fcntl
@@ -50,7 +57,7 @@ class MMXClientChannel(Channel):
         pass
 
     def Network_updateclient(self, data):
-        print(f"Client wants me send them stuff!\n{data}")
+        # print(f"Client wants me send them stuff!\n{data}")
         self._server.SendToAll()
 
     def Network_updateserver(self, data):
@@ -59,7 +66,7 @@ class MMXClientChannel(Channel):
         self._server.SendToAll()
 
     def Network_newconnection(self, data):
-        print(f"I have a new connection! (channel level)\n{data}")
+        # print(f"I have a new connection! (channel level)\n{data}")
         self.username = data['un']
 
 class MMXServer(Server):
@@ -70,9 +77,11 @@ class MMXServer(Server):
         super().__init__(*args, **kwargs)
         self.data_cache = dict()
         self.players = WeakKeyDictionary()
+        # self.level =
+        print(f"IP address: {get_lan_ip()}")
 
     def Connected(self, channel, addr):
-        print(f"We have a new connection from {addr}! (server level)")
+        # print(f"We have a new connection from {addr}! (server level)")
         self.AddPlayer(channel)
 
     def AddPlayer(self, player):
@@ -99,7 +108,11 @@ class MMXServer(Server):
 
 
 if __name__ == '__main__':
+    mmx_main_path = os.path.normpath(os.path.join(os.path.realpath(__file__), "..", "..", ".."))
+    if mmx_main_path not in sys.path:
+        sys.path.append(mmx_main_path)
     os.system("cls")
+    # args = get_args()
     server = MMXServer(localaddr=('localhost', 12000))
     print(server)
     while True:

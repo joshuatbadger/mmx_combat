@@ -9,7 +9,7 @@ from PodSixNet.Connection import connection, ConnectionListener
 
 class MMXClient(ConnectionListener):
     def __init__(self, host, port, player_name, level):
-        print("Intantiating client")
+        print("Instantiating client")
         self.Connect((host, port))
         self.player_name = player_name
         self.level = level

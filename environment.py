@@ -43,11 +43,11 @@ class SpikeWall(BaseEnvironmentObj):
     def __init__(self,x,y,width,height):
         super().__init__(x,y,width,height)
         self.image.fill(CN.RED)
-        self.collide_damage = 900
+        self.collide_damage = 9000
 
 class Level(object):
     """Generic Base Level class"""
-    def __init__(self, server_ip, server_port, username):
+    def __init__(self, server_ip, server_port, username, network=True):
         self.wall_list = pygame.sprite.Group()
         self.misc_objs = pygame.sprite.Group()
         self.npc_enemies = pygame.sprite.Group()
@@ -56,9 +56,13 @@ class Level(object):
         self.player_names = set()
         self.spawn_points = []
         self.enemy_spawn_points = []
-        self.server_addr = server_ip, server_port
         self.player_data = dict()
-        self.chat_client = MMXClient(*self.server_addr, username, self )
+        if network:
+            self.server_addr = server_ip, server_port
+            self.chat_client = MMXClient(*self.server_addr, username, self )
+        else:
+            self.server_addr = None
+            self.chat_client = None
 
     def print_data_cache(self):
         print(json.dumps(self.player_data, indent=4))
@@ -74,30 +78,35 @@ class Level(object):
         self.misc_objs.draw(screen)
         self.all_sprite_list.draw(screen)
 
-    def build_level_objs(self, level_path):
-        wall_locations_v_lines = []
-        wall_locations_y_lines = []
+    def build_level(self, level_path):
         with open(level_path) as level:
             l = level.readlines()
-            for y, line in enumerate(l):
-                for x, char in enumerate(line):
-                    if char in ("X","Y"):
-                        wall_locations_v_lines.append((x,y))
-                    elif char in ("<", ">", "^", "V"):
-                        wall = SpikeWall(x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE, CN.LEVEL_TILE_SIZE, CN.LEVEL_TILE_SIZE)
-                        self.npc_enemies.add(wall)
-                        self.all_sprite_list.add(wall)
-                    elif char in ("E"):
-                        self.enemy_spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
-                    # Find spawn points (max 10 for now)
-                    elif char in [str(c) for c in range(0,10)]:
-                        # print(f"Found spawn point {char}!")
-                        self.spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
+        self.build_level_objs(l)
 
-            self._parse_walls(wall_locations_v_lines)
+    def build_level_objs(self, level_lines):
+        wall_locations_v_lines = []
+        wall_locations_y_lines = []
+        for y, line in enumerate(level_lines):
+            for x, char in enumerate(line):
+                if char in ("X","Y"):
+                    wall_locations_v_lines.append((x,y))
+                elif char in ("<", ">", "^", "V"):
+                    wall = SpikeWall(x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE, CN.LEVEL_TILE_SIZE, CN.LEVEL_TILE_SIZE)
+                    self.npc_enemies.add(wall)
+                    self.all_sprite_list.add(wall)
+                elif char in ("E"):
+                    self.enemy_spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
+                # Find spawn points (max 10 for now)
+                elif char in [str(c) for c in range(0,10)]:
+                    # print(f"Found spawn point {char}!")
+                    self.spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
 
-            self.width = len(line)*CN.LEVEL_TILE_SIZE
-            self.height = len(l)*CN.LEVEL_TILE_SIZE
+        self._parse_walls(wall_locations_v_lines)
+
+        self.block_width = len(line)
+        self.width = self.block_width*CN.LEVEL_TILE_SIZE
+        self.block_height = len(level_lines)
+        self.height = self.block_height*CN.LEVEL_TILE_SIZE
         # self.build_enemies()
 
     def _parse_walls(self, wall_block_list):
@@ -145,11 +154,14 @@ class Level(object):
             except:
                 print(traceback.format_exc())
 
+class RemoteLevel(Level):
+    def __init__(self, server_ip, server_port, username):
+        super().__init__('127.0.0.1', 12000, 'Server')
 
 
 class TestLevel(Level):
-    def __init__(self, server_ip, server_port, username):
-        super().__init__(server_ip, server_port, username)
+    def __init__(self, server_ip, server_port, username, network=True):
+        super().__init__(server_ip, server_port, username, network)
         level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_02.txt"))
-        self.build_level_objs(level_path)
+        self.build_level(level_path)
         self.build_enemies()

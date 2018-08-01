@@ -3,6 +3,7 @@ from datetime import datetime
 import os
 import math
 import pygame
+import random
 
 import MMX_Combat.constants as CN
 from MMX_Combat.weapons import EnemyBuster1
@@ -83,7 +84,7 @@ class BaseEnemy(pygame.sprite.Sprite):
                 self.target = None
             else:
                 # We're close enough, attack!
-                [self.attack, self.follow][datetime.now().time().microsecond % 2](self.target)
+                random.choice([self.attack, self.follow])(self.target)
 
     def update(self):
         if self.health <= 0:

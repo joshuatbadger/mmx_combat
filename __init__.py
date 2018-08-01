@@ -3,6 +3,8 @@ import sys
 os.environ["PYTHONDONTWRITEBYTECODE"] = 'stobbit'
 
 import datetime
+import argparse
+import threading
 
 try:
     import pygame
@@ -10,28 +12,33 @@ except ImportError as e:
     print("Can't import `pygame`. Did you remember to activate the virtual environment?")
     sys.exit(5)
 
-def test():
+def get_args():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--solo', action='store_true', help='Launch level with no network capabilities. Overrides server and client.')
+    parser.add_argument('--server', action='store_true', help='Launch level with server capabilities. Overrides client.')
+    parser.add_argument('--useserver', help='Launch level as client connecting to specified server IP address.')
+    parser.add_argument('-u', '--username', required=True, help='Username')
+    parser.add_argument('-c', '--color', required=True, help='Username')
+    parser.add_argument('-r', '--resolution', help='resolution to run game at')
+
+    return parser.parse_args()
+
+
+def test(args):
     os.system("cls")
     print("Beginning the pygame test\n\n")
     print(f"pygame version: {pygame.__version__}")
     global USERNAME
 
-    if CN.DEBUG:
-        USERNAME = "Eclipse_JTB"
-    else:
-        USERNAME = input("Username: ")
+    USERNAME = args.username
 
-    # USERNAME = "Eclipse_JTB"
-    # for item in sorted(dir(pygame)):
-    #     print(item)
-
-    prompt = ''
-
-    while prompt not in CN.COLOR_DICT:
-        prompt = input("player color: ").upper()
+    color = args.color.upper()
+    if color not in CN.COLOR_DICT:
+        raise ValueError("Must be one of BLACK, WHITE, RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA")
 
 
-    start_game(USERNAME, player_color=prompt)
+    start_game(args)
 
 def make_text(text, color, bgcolor, top, left):
     textSurf = CN.BASICFONT.render(text, True, color, bgcolor)
@@ -39,6 +46,12 @@ def make_text(text, color, bgcolor, top, left):
     textRect.topleft = (top, left)
     return (textSurf, textRect)
 
+def get_screen_size(res):
+    try:
+        w, h = res.split('x')
+        return (int(w), int(h))
+    except:
+        return CN.SCREEN_SIZE
 
 def get_proper_screen_size(w,h):
     # print(f'Resize Attempt width: {w}')
@@ -52,18 +65,29 @@ def get_proper_screen_size(w,h):
             h = int(9*(float(w)/16))
     return w,h
 
-def start_game(player_name, player_color='BLUE'):
+def start_server():
+    from MMX_Combat.network.server import MMXServer
+    from time import sleep
+    server = MMXServer(localaddr=('127.0.0.1', 12000))
+    print(server)
+    while True:
+        server.Pump()
+        sleep(0.0001)
+    # return server
 
+def start_game(args):
 
     from MMX_Combat.player import BasePlayerObj, LocalPlayerObj, DummyJoystick
     from MMX_Combat.environment import BaseEnvironmentObj, TestLevel
     from MMX_Combat.camera import Camera, complex_camera
+    from MMX_Combat.network.server import MMXServer
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
-    SCREEN = pygame.display.set_mode(CN.SCREEN_SIZE, pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE)
+    SCREEN = pygame.display.set_mode(get_screen_size(args.resolution), pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE)
     CAMERA_SCREEN = pygame.Surface(CN.SCREEN_REZ)
-    pygame.display.set_caption(f'MMX Combat: {USERNAME}')
+
+    pygame.display.set_caption(f'MMX Combat: {args.username}')
 
     BASICFONT = pygame.font.Font(None, CN.BASICFONTSIZE)
 
@@ -79,11 +103,21 @@ def start_game(player_name, player_color='BLUE'):
     else:
         jstick = DummyJoystick()
 
-    level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, USERNAME)
+    if args.solo:
+        level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, False)
+    elif args.server:
+        threading.Thread(target=start_server, daemon=True).start()
+        level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, True)
+    elif args.useserver:
+        level = TestLevel(args.useserver, CN.DEFAULT_SERVER_PORT, args.username, True)
+
+    # print(f'Level block size: ({level.block_width}x{level.block_height})')
+    MINIMAP_SCREEN = pygame.Surface((level.width, level.height))
+    show_minimap = False
 
     all_players = []
 
-    local_player = LocalPlayerObj(USERNAME, level, jstick, player_color)
+    local_player = LocalPlayerObj(USERNAME, level, jstick, args.color)
     # local_player = LocalPlayerObj(USERNAME, level, jstick, player_color, {"MAX_SHOTS":2})
     all_players.append(local_player)
 
@@ -131,6 +165,9 @@ def start_game(player_name, player_color='BLUE'):
             CN.FPS -= 1
         if cur_keys[pygame.K_KP_PLUS] and CN.FPS < 30:
             CN.FPS += 1
+
+        show_minimap = True if cur_keys[pygame.K_TAB] else False
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 print(f"  Longest frame process: {longest_proc_frame} seconds")
@@ -187,7 +224,7 @@ def start_game(player_name, player_color='BLUE'):
                     if local_player.charge_level > 2:
                         local_player.fire()
 
-            # Check for keys being pressed.
+            # Check for keys being pressed this frame.
             elif event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
                     local_player.fire()
@@ -218,6 +255,7 @@ def start_game(player_name, player_color='BLUE'):
                     local_player.standup()
 
         CAMERA_SCREEN.fill(CN.BLACK)
+        MINIMAP_SCREEN.fill(CN.BLACK)
 
         # Update info on all players
         proc_start_time = datetime.datetime.now()
@@ -238,8 +276,13 @@ def start_game(player_name, player_color='BLUE'):
         # Apply camera
         for s in level.all_sprite_list:
             CAMERA_SCREEN.blit(s.image, player_camera.apply(s))
+            MINIMAP_SCREEN.blit(s.image, s.rect)
 
         SCREEN.blit(pygame.transform.scale(CAMERA_SCREEN, [*SCREEN.get_size()], SCREEN), [0,0])
+        if show_minimap:
+            MINIMAP_SCREEN.set_alpha(128)
+            SCREEN.blit(pygame.transform.scale(MINIMAP_SCREEN, [level.block_width*4, level.block_height*4]),
+                        [SCREEN.get_size()[0]-(level.block_width*4), SCREEN.get_size()[1]-(level.block_height*4)])
 
         # Display debug and/or controls
         if CN.DEBUG:
@@ -261,14 +304,14 @@ def start_game(player_name, player_color='BLUE'):
                     Movement: Arrow Keys or Controller D-Pad
                     Jump: Spacebar or bottom Controller button (X)
                     Dash: Shift or right Controller button (O)
-                    Fire: Control or left Controller button ([])
-                    """
+                    Fire: Control or left Controller button ([])"""
             for i, line in enumerate(text.split("\n")):
-                text_surf, text_rect = make_text(line.replace("    ", ""), CN.WHITE, CN.BLACK, 50, 10+(i*1.1*CN.BASICFONTSIZE))
+                text_surf, text_rect = make_text(line.strip(), CN.WHITE, CN.BLACK, 50, 10+(i*1.1*CN.BASICFONTSIZE))
                 SCREEN.blit(text_surf, text_rect)
 
 
         pygame.display.flip()
+        # print(f'{threading.activeCount()} active threads!')
         FPSCLOCK.tick(CN.FPS)
 
 
@@ -278,4 +321,6 @@ if __name__ == "__main__":
     if mmx_main_path not in sys.path:
         sys.path.append(mmx_main_path)
     import MMX_Combat.constants as CN
-    test()
+    args = get_args()
+    # print(args)
+    test(args)

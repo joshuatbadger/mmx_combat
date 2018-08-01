@@ -3,6 +3,7 @@ from datetime import datetime
 import json
 import math
 import pygame
+import random
 
 
 from abc import ABCMeta, abstractmethod
@@ -87,7 +88,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.STAGGER_VELOCITY = CN.STAGGER_VELOCITY
         self.username = username
         self.jstick = jstick
-        self.color = color
+        self.color = color.upper()
 
         # Modify constants on first instantiation based on powerup dictionary
         if pu_dict:
@@ -113,15 +114,15 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
         # Build collision rects and apply standing rectangle
         self.standing_image = pygame.Surface([CN.X_STANDING_HITBOX_W,CN.X_STANDING_HITBOX_H])
-        self.standing_image.fill(CN.COLOR_DICT[color])
+        self.standing_image.fill(CN.COLOR_DICT[self.color])
         self.standing_rect = self.standing_image.get_rect()
 
         self.ducking_image = pygame.Surface([CN.X_STANDING_HITBOX_W,CN.X_STANDING_HITBOX_W])
-        self.ducking_image.fill(CN.COLOR_DICT[color])
+        self.ducking_image.fill(CN.COLOR_DICT[self.color])
         self.ducking_rect = self.ducking_image.get_rect()
 
         self.dashing_image = pygame.Surface([CN.X_STANDING_HITBOX_H,CN.X_STANDING_HITBOX_W])
-        self.dashing_image.fill(CN.COLOR_DICT[color])
+        self.dashing_image.fill(CN.COLOR_DICT[self.color])
         self.dashing_rect = self.dashing_image.get_rect()
 
         self.image = self.standing_image
@@ -138,8 +139,9 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         spawn_points = self.LEVEL.spawn_points
         if not spawn_points:
             raise Exception("Cannot find spawn_points")
-        point_index = datetime.now().time().microsecond % len(spawn_points)
-        return spawn_points[point_index]
+        # point_index = datetime.now().time().microsecond % len(spawn_points)
+        # return spawn_points[point_index]
+        return random.choice(spawn_points)
 
     def update(self):
         """ Move the player """
@@ -275,9 +277,11 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
                 self.damage(enemy.collide_damage)
                 break
 
-        self.LEVEL.chat_client.send_update_to_server(self._build_player_dict())
-        # self.LEVEL.chat_client.send_update_to_server({'un': self.username, 'data': 24})
-        self.LEVEL.chat_client.Loop()
+        if self.LEVEL.server_addr:
+            # Handle network communication
+            self.LEVEL.chat_client.send_update_to_server(self._build_player_dict())
+            # self.LEVEL.chat_client.send_update_to_server({'un': self.username, 'data': 24})
+            self.LEVEL.chat_client.Loop()
 
     def _build_player_dict(self):
         upload_dict = dict()
@@ -395,7 +399,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             self.velocity_hold = self.WALL_JUMP_VELOCITY_HOLD
 
             # Build x velocity below, but first check for dashability
-            dash = bool(self._check_control_jump() and self.can_dash)
+            dash = bool(self._check_control_dash() and self.can_dash)
             # print(f"dash? {dash}")
             if dash:
                 self.dashing = 0
