@@ -7,6 +7,7 @@ import random
 
 
 from abc import ABCMeta, abstractmethod
+from collections import deque
 from .weapons import Buster1
 
 from . import constants as CN
@@ -79,6 +80,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.LEVEL = level
         self.GRAVITY = CN.GRAVITY
         self.JUMP_SPEED = CN.JUMP_SPEED
+        self.DELAY_JUMP_PERIOD = CN.DELAY_JUMP_PERIOD
         self.RUN_SPEED = CN.RUN_SPEED
         self.DASH_MULT = CN.DASH_MULT
         self.DASH_TIME = CN.DASH_TIME
@@ -106,6 +108,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.shot_weapons = []
         self.health = self.BASE_HEALTH
         self.wait_camera = False
+        self.delay_jump = self.DELAY_JUMP_PERIOD
+        self.y_vel_history = deque([],self.delay_jump)
 
 
         # Initialize current key presses and controller dpad positions
@@ -165,8 +169,16 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self._cur_keys = pygame.key.get_pressed()
         self._cur_hat = self.jstick.get_hat(0)
 
+        # Get previous y_velocity to check whether we were moving up or down things
+        self.y_vel_history.append(self.y_velocity)
         # Apply gravity
         self.calc_gravity()
+        # Are we in the jump "grace period"?
+        if sum(self.y_vel_history) > (6*self.GRAVITY):
+            self.delay_jump = 0
+        elif sum(self.y_vel_history) < (6*self.GRAVITY) and self.delay_jump > 0:
+            self.delay_jump -= 1
+
 
         if self.velocity_hold > 0:
             self.velocity_hold -= 1
@@ -240,6 +252,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
         # Vertical motion
         self.rect.y += self.y_velocity
+        if self.y_velocity < 0:
+            self.delay_jump = 0
         # Vertical collisions
         block_hit_list = pygame.sprite.spritecollide(self, self.walls, False)
         for block in block_hit_list:
@@ -253,6 +267,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
                 self.rect.bottom = block.rect.top
                 self.y_velocity = 0
                 self.on_ground = True
+                self.delay_jump = 4
+                self.y_vel_history.extend([0,0,0,0])
                 self.wall_hold = False
                 if self.taking_damage == 0:
                     self.taking_damage = -1
@@ -264,12 +280,6 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             self.taking_damage = -1
 
         dy -= self.rect.y
-
-        # if CN.DEBUG and math.hypot(abs(dx),abs(dy)) > math.hypot(CN.RUN_SPEED, CN.JUMP_SPEED):
-        #     print("NEW UPDATE!!!!\n-----------------------------------------------------")
-        #     for k,v in sorted(self.__dict__.items()):
-        #         print(f'{k}: {v}')
-        #     print("-----------------------------------------------------\n")
 
         if not self.invulnerable:
             enemy_hit_list = pygame.sprite.spritecollide(self, self.LEVEL.npc_enemies, False)
@@ -369,7 +379,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         platform_hit_list = pygame.sprite.spritecollide(self, self.walls, False)
         self.rect.y -= 2
 
-        if platform_hit_list:
+        if platform_hit_list or self.delay_jump > 0:
             # we're on the ground
             self.change_rect(self.standing_image, self.standing_rect)
             self.y_velocity = -1 * self.JUMP_SPEED

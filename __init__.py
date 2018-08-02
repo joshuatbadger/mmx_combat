@@ -18,6 +18,7 @@ def get_args():
     parser.add_argument('--solo', action='store_true', help='Launch level with no network capabilities. Overrides server and client.')
     parser.add_argument('--server', action='store_true', help='Launch level with server capabilities. Overrides client.')
     parser.add_argument('--useserver', help='Launch level as client connecting to specified server IP address.')
+    parser.add_argument('--debug', action='store_true',help='Display variables from the player')
     parser.add_argument('-u', '--username', required=True, help='Username')
     parser.add_argument('-c', '--color', required=True, help='Username')
     parser.add_argument('-r', '--resolution', help='resolution to run game at')
@@ -81,6 +82,8 @@ def start_game(args):
     from MMX_Combat.environment import BaseEnvironmentObj, TestLevel
     from MMX_Combat.camera import Camera, complex_camera
     from MMX_Combat.network.server import MMXServer
+
+    DEBUG = args.debug
 
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
@@ -285,7 +288,7 @@ def start_game(args):
                         [SCREEN.get_size()[0]-(level.block_width*4), SCREEN.get_size()[1]-(level.block_height*4)])
 
         # Display debug and/or controls
-        if CN.DEBUG:
+        if DEBUG:
             text_surf, text_rect = make_text("{}: {}".format('username',str(local_player.__dict__['username'])), CN.WHITE, CN.BLACK, 50, 10)
             SCREEN.blit(text_surf, text_rect)
             i = 1
