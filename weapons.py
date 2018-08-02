@@ -43,8 +43,8 @@ class Buster1(BaseWeapon, pygame.sprite.Sprite):
         self.image = pygame.Surface(self.size)
         self.image.fill(self.color)
         self.rect = self.image.get_rect()
-        self.rect.x = self.parent.rect.x + self.parent.rect.width/2 - self.rect.width
-        self.rect.y = self.parent.rect.y + self.parent.rect.height/2 - self.rect.height
+        self.rect.x = self.parent.rect.centerx - self.rect.width/2
+        self.rect.y = self.parent.rect.centery - self.rect.height/2
 
     def update(self):
         if self.rem_frames > 0:
@@ -93,15 +93,15 @@ class EnemyBuster1(BaseWeapon, pygame.sprite.Sprite):
         self.image = pygame.Surface([5,5])
         self.image.fill(CN.MAGENTA)
         self.rect = self.image.get_rect()
-        self.rect.x = self.parent.rect.x + self.parent.rect.width/2
-        self.rect.y = self.parent.rect.y + self.parent.rect.height/2
+        self.rect.x = self.parent.rect.centerx + self.rect.width/2
+        self.rect.y = self.parent.rect.centery + self.rect.height/2
         self.rem_frames = 90
         self.speed = 15.0
-        self.hypot = math.hypot(self.parent.target.rect.x - self.parent.rect.x, self.parent.target.rect.y - self.parent.rect.y) / self.speed
+        self.hypot = math.hypot(self.parent.target.rect.centerx - self.parent.rect.centerx, self.parent.target.rect.centery - self.parent.rect.centery) / self.speed
         if self.hypot == 0:
             self.hypot = 1
-        self.x_velocity = ((self.parent.target.rect.x + self.parent.rect.width/2) - (self.parent.rect.x + self.parent.rect.width/2)) / self.hypot
-        self.y_velocity = ((self.parent.target.rect.y + self.parent.rect.height/2) - (self.parent.rect.y + self.parent.rect.height/2)) / self.hypot
+        self.x_velocity = (self.parent.target.rect.centerx - self.parent.rect.centerx) / self.hypot
+        self.y_velocity = (self.parent.target.rect.centery - self.parent.rect.centery) / self.hypot
 
     def update(self):
         # print("Updating the enemy weapon")
