@@ -21,8 +21,8 @@ class BaseWeapon(metaclass=ABCMeta):
     def destroy(self):
         pass
 
-class Buster1(BaseWeapon, pygame.sprite.Sprite):
-    def __init__(self, parent, energy, size, color):
+class PlayerBuster1(BaseWeapon, pygame.sprite.Sprite):
+    def __init__(self, parent, energy, size, color, destroyed_by_enemies=True):
         # call parent's constructor
         super(BaseWeapon, self).__init__()
 
@@ -31,6 +31,7 @@ class Buster1(BaseWeapon, pygame.sprite.Sprite):
         self.energy = energy
         self.size = size
         self.color = color
+        self.destroyed_by_enemies = destroyed_by_enemies
 
         self.build_image_and_rect()
 
@@ -64,12 +65,13 @@ class Buster1(BaseWeapon, pygame.sprite.Sprite):
         enemy_hit_list = pygame.sprite.spritecollide(self, self.parent.LEVEL.npc_enemies, False)
         for enemy in enemy_hit_list:
             enemy.damage(self.energy)
-            self.destroy()
-            return
+            if self.destroyed_by_enemies:
+                self.destroy()
+                return
 
         # Check if we're at least half a screen away. if we are, we can begin firing again.
         # Shots shouldn't die until they impact, but we CAN fire again once they're at least that far away
-        if (abs(self.rect.x - self.parent.rect.x) > (CN.SCREEN_WIDTH/2) + self.x_velocity) or (abs(self.rect.y - self.parent.rect.y) > (CN.SCREEN_WIDTH/2) + self.x_velocity):
+        if (abs(self.rect.centerx - self.parent.rect.centerx) > (CN.SCREEN_WIDTH/2) + self.x_velocity) or (abs(self.rect.centery - self.parent.rect.centery) > (CN.SCREEN_WIDTH/2) + self.x_velocity):
             if self in self.parent.shot_weapons:
                 self.parent.shot_weapons.remove(self)
             return
@@ -78,6 +80,200 @@ class Buster1(BaseWeapon, pygame.sprite.Sprite):
     def destroy(self):
         if self in self.parent.shot_weapons:
             self.parent.shot_weapons.remove(self)
+        self.kill()
+
+class PlayerSaber1(BaseWeapon, pygame.sprite.Sprite):
+    def __init__(self, parent, color=CN.YELLOW, energy=2):
+        # call parent's constructor
+        super(BaseWeapon, self).__init__()
+        print('')
+        self.parent = parent
+        self.energy = energy
+        self.color = color
+        # self.build_image_and_rect()
+        self.rem_frames = 10
+        self.parent.wait_weapon = True
+        self.parent.fire_wait = self.rem_frames + 1
+        # Build hitbox data for what frame we're on. This will eventually be replaced by sprites.
+        self.hitbox_dict = {
+                                 10: {
+                                        'size': [10,10],
+                                        'attr': {
+                                                    'left': {
+                                                                'top': 'top',
+                                                                'left': 'right'
+                                                            },
+                                                    'right': {
+                                                                'top': 'top',
+                                                                'right': 'left'
+                                                            }
+                                                 }
+                                     },
+                                  9: {
+                                         'size': [25,10],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'top',
+                                                                 'right': 'right'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'top',
+                                                                 'left': 'left'
+                                                             }
+                                                  }
+                                      },
+                                  8: {
+                                         'size': [40,40],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'centery',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'centery',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      },
+                                  7: {
+                                         'size': [50,50],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'bottom',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'bottom',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      },
+                                  6: {
+                                         'size': [50,50],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'bottom',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'bottom',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      },
+                                  5: {
+                                         'size': [30,30],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'bottom',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'bottom',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      },
+                                  4: {
+                                         'size': [15,15],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'bottom',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'bottom',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      },
+                                  3: {
+                                         'size': [12,12],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'bottom',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'bottom',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      },
+                                  2: {
+                                         'size': [10,10],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'bottom',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'bottom',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      },
+                                  1: {
+                                         'size': [7,7],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'bottom',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'bottom',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      },
+                                  0: {
+                                         'size': [5,5],
+                                         'attr': {
+                                                     'left': {
+                                                                 'bottom': 'bottom',
+                                                                 'right': 'left'
+                                                             },
+                                                     'right': {
+                                                                 'bottom': 'bottom',
+                                                                 'left': 'right'
+                                                             }
+                                                  }
+                                      }
+                                }
+
+    def build_image_and_rect(self):
+        # print("Updating Saber")
+        current_state = self.hitbox_dict[self.rem_frames]
+        cur_dir = self.parent.direction
+        self.image = pygame.Surface(current_state['size'])
+        self.image.fill(self.color)
+        self.rect = self.image.get_rect()
+        # self.rect.x = self.parent.rect.centerx - self.rect.width/2
+        # self.rect.y = self.parent.rect.centery - self.rect.height/2
+
+        # Align to parent rect
+        for attr, ref in current_state['attr'][cur_dir].items():
+            # if attr in ('right', 'left'):
+            #     print(f"{self.rem_frames}: Saber's {attr} goes on player {ref} when facing {cur_dir}\n")
+            setattr(self.rect, attr, getattr(self.parent.rect, ref ))
+
+    def update(self):
+        # print(f'Saber remaining frames: {self.rem_frames}')
+        if self.rem_frames == -1:
+            self.destroy()
+            return
+        self.build_image_and_rect()
+        self.rem_frames -= 1
+
+        # Check for enemy collisions
+        enemy_hit_list = pygame.sprite.spritecollide(self, self.parent.LEVEL.npc_enemies, False)
+        for enemy in enemy_hit_list:
+            enemy.damage(self.energy)
+
+    def destroy(self):
+        if self in self.parent.shot_weapons:
+            self.parent.shot_weapons.remove(self)
+        self.parent.wait_weapon = False
         self.kill()
 
 
@@ -93,8 +289,8 @@ class EnemyBuster1(BaseWeapon, pygame.sprite.Sprite):
         self.image = pygame.Surface([5,5])
         self.image.fill(CN.MAGENTA)
         self.rect = self.image.get_rect()
-        self.rect.x = self.parent.rect.centerx + self.rect.width/2
-        self.rect.y = self.parent.rect.centery + self.rect.height/2
+        self.rect.x = self.parent.rect.centerx - self.rect.width/2
+        self.rect.y = self.parent.rect.centery - self.rect.height/2
         self.rem_frames = 90
         self.speed = 15.0
         self.hypot = math.hypot(self.parent.target.rect.centerx - self.parent.rect.centerx, self.parent.target.rect.centery - self.parent.rect.centery) / self.speed

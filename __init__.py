@@ -27,6 +27,7 @@ def get_args():
 
 
 def test(args):
+    # Testing basic movement, weapons, environment here.
     os.system("cls")
     print("Beginning the pygame test\n\n")
     print(f"pygame version: {pygame.__version__}")
@@ -42,12 +43,18 @@ def test(args):
     start_game(args)
 
 def make_text(text, color, bgcolor, top, left):
+    '''
+    Create rough text box to blit onto screen
+    '''
     textSurf = CN.BASICFONT.render(text, True, color, bgcolor)
     textRect = textSurf.get_rect()
     textRect.topleft = (top, left)
     return (textSurf, textRect)
 
 def get_screen_size(res):
+    '''
+    Get screen area from args, and return default value if not parseable
+    '''
     try:
         w, h = res.split('x')
         return (int(w), int(h))
@@ -55,8 +62,10 @@ def get_screen_size(res):
         return CN.SCREEN_SIZE
 
 def get_proper_screen_size(w,h):
-    # print(f'Resize Attempt width: {w}')
-    # print(f'Resize Attempt height: {h}')
+    '''
+    Force screen size to be 16x9
+    '''
+    # TODO: Python float storage imperfect, rejigger this plz
     while float(w)/float(h) != CN.SCREEN_ASPECTRATIO:
         if float(w)/float(h) > CN.SCREEN_ASPECTRATIO:
             # too wide, base off of height
@@ -67,24 +76,39 @@ def get_proper_screen_size(w,h):
     return w,h
 
 def start_server():
+    '''
+    Run the server for the game. Eventually build the game loop here.
+    '''
     from MMX_Combat.network.server import MMXServer
     from time import sleep
     server = MMXServer(localaddr=('127.0.0.1', 12000))
     print(server)
+    i = 0
+    pygame.init()
+    server_clock = pygame.time.Clock()
+    # Update thrice as many times as there are players per frame
+    interval = float(len(server.players) * 3)
     while True:
-        server.Pump()
-        sleep(0.0001)
-    # return server
+        i += 1
+        i = i % int(interval)
+        server.CalcAndPump(i)
+        server_clock.tick(CN.FPS/interval)
 
 def start_game(args):
+    '''
+    The actual game function. Imports necessary modules, builds level (should
+    move this to server), makes player, and houses main game loop.
+    '''
 
+    # Import game-specific modules
     from MMX_Combat.player import BasePlayerObj, LocalPlayerObj, DummyJoystick
-    from MMX_Combat.environment import BaseEnvironmentObj, TestLevel
+    from MMX_Combat.environment import BaseEnvironmentObj, TestLevel, ServerTestLevel
     from MMX_Combat.camera import Camera, complex_camera
     from MMX_Combat.network.server import MMXServer
 
     DEBUG = args.debug
 
+    # Initialize key program elements
     pygame.init()
     FPSCLOCK = pygame.time.Clock()
     SCREEN = pygame.display.set_mode(get_screen_size(args.resolution), pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE)
@@ -110,9 +134,9 @@ def start_game(args):
         level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, False)
     elif args.server:
         threading.Thread(target=start_server, daemon=True).start()
-        level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, True)
+        level = ServerTestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, True)
     elif args.useserver:
-        level = TestLevel(args.useserver, CN.DEFAULT_SERVER_PORT, args.username, True)
+        level = ServerTestLevel(args.useserver, CN.DEFAULT_SERVER_PORT, args.username, True)
 
     # print(f'Level block size: ({level.block_width}x{level.block_height})')
     MINIMAP_SCREEN = pygame.Surface((level.width, level.height))
@@ -164,9 +188,9 @@ def start_game(args):
             local_player.charge()
         if local_player._check_control_dash():
             local_player.dash()
-        if cur_keys[pygame.K_KP_MINUS] and CN.FPS > 1:
+        if (cur_keys[pygame.K_KP_MINUS] or cur_keys[pygame.K_MINUS]) and CN.FPS > 1:
             CN.FPS -= 1
-        if cur_keys[pygame.K_KP_PLUS] and CN.FPS < 30:
+        if (cur_keys[pygame.K_KP_PLUS] or cur_keys[pygame.K_PLUS])and CN.FPS < 30:
             CN.FPS += 1
 
         show_minimap = True if cur_keys[pygame.K_TAB] else False
@@ -231,6 +255,8 @@ def start_game(args):
             elif event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_LCTRL, pygame.K_RCTRL):
                     local_player.fire()
+                elif event.key == pygame.K_z:
+                    local_player.alt_fire()
                 elif event.key == pygame.K_i:
                     level.print_data_cache()
 
@@ -298,7 +324,7 @@ def start_game(args):
             for k,v in sorted(local_player.__dict__.items()):
                 # print(k)
                 # print("\t" + str(type(v)))
-                if k != 'username' and not callable(v) and not k.startswith("_"):
+                if k != 'username' and not callable(v) and not k.startswith("_") and k[0] != k[0].upper() and isinstance(v, (int, bool, list)):
                     text_surf, text_rect = make_text("{}: {} ({})".format(k,str(v), type(v)), CN.WHITE, CN.BLACK, 50, 10+(i*1.1*CN.BASICFONTSIZE))
                     SCREEN.blit(text_surf, text_rect)
                     i += 1

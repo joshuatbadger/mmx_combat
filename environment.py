@@ -165,3 +165,10 @@ class TestLevel(Level):
         level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_02.txt"))
         self.build_level(level_path)
         self.build_enemies()
+
+class ServerTestLevel(Level):
+    def __init__(self, server_ip, server_port, username, network=True):
+        super().__init__(server_ip, server_port, username, network)
+        level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_02.txt"))
+        self.build_level(level_path)
+        self.build_enemies()

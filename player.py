@@ -8,7 +8,7 @@ import random
 
 from abc import ABCMeta, abstractmethod
 from collections import deque
-from .weapons import Buster1
+from .weapons import PlayerBuster1, PlayerSaber1
 
 from . import constants as CN
 
@@ -110,6 +110,9 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.wait_camera = False
         self.delay_jump = self.DELAY_JUMP_PERIOD
         self.y_vel_history = deque([],self.delay_jump)
+        self.alt_weapons = [PlayerSaber1]
+        self.cur_alt_weapon = 0
+        self.wait_weapon = False
 
 
         # Initialize current key presses and controller dpad positions
@@ -333,6 +336,9 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
     def _check_control_fire(self):
         return self._cur_keys[pygame.K_LCTRL] or self._cur_keys[pygame.K_RCTRL] or self.jstick.get_button(2)
 
+    def _check_control_altfire(self):
+        return self._cur_keys[pygame.K_Z] or self.jstick.get_button(3)
+
     def calc_gravity(self):
         """Are we gravity-ing?"""
         if self.taking_damage > 0:
@@ -347,8 +353,6 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             self.y_velocity = self.WALL_DRAG_SPEED
         else:
             # We're in freefall. Calculate acceleration.
-            # if self.y_velocity == 0:
-            #     self.y_velocity = self.GRAVITY
             if self.y_velocity < self.JUMP_SPEED:
                 self.y_velocity += self.GRAVITY
             else:
@@ -433,8 +437,10 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         if self.velocity_hold == 0:
             self.direction = 'left'
             if not self._check_control_right() and not self.ducking:
-                # if self.dashing > -1:
-                self.x_velocity = -1*self.RUN_SPEED
+                if not (self.on_ground and self.wait_weapon):
+                    self.x_velocity = -1*self.RUN_SPEED
+                else:
+                    self.x_velocity = 0
             else:
                 self.x_velocity = 0
 
@@ -442,7 +448,10 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         if self.velocity_hold == 0:
             self.direction = 'right'
             if not self._check_control_left() and not self.ducking:
-                self.x_velocity = self.RUN_SPEED
+                if not (self.on_ground and self.wait_weapon):
+                    self.x_velocity = self.RUN_SPEED
+                else:
+                    self.x_velocity = 0
             else:
                 self.x_velocity = 0
 
@@ -456,16 +465,22 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             self.can_dash = False
 
     def fire(self):
-        if len(self.shot_weapons) < self.MAX_SHOTS:
+        if len(self.shot_weapons) < self.MAX_SHOTS and not self.wait_weapon:
             if self.charge_level < 15:
-                new_buster = Buster1(self, 1, [5,5], CN.YELLOW)
+                new_buster = PlayerBuster1(self, 1, [5,5], CN.YELLOW)
             elif self.charge_level < 50:
-                new_buster = Buster1(self, 3, [10,5], CN.CYAN)
+                new_buster = PlayerBuster1(self, 3, [10,5], CN.CYAN)
             elif self.charge_level >= 50:
-                new_buster = Buster1(self, 10, [15,10], CN.GREEN)
+                new_buster = PlayerBuster1(self, 10, [30,30], CN.GREEN, False)
             self.shot_weapons.append(new_buster)
             self.LEVEL.all_sprite_list.add(new_buster)
             self.discharge()
+
+    def alt_fire(self):
+        if not self.wait_weapon:
+            weapon = self.alt_weapons[self.cur_alt_weapon](self)
+            self.LEVEL.all_sprite_list.add(weapon)
+
 
     def stop(self):
         if not self.velocity_hold:

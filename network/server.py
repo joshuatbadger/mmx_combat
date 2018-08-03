@@ -13,6 +13,7 @@ from PodSixNet.Server import Server
 
 try:
     from .. import environment
+    print("Server successfully imported stuff!")
 except (ValueError, ImportError):
     print("Server couldn't import.... try importing explicitly")
 
@@ -105,6 +106,13 @@ class MMXServer(Server):
         # print(self.data_cache)
         [p.Send({'action': 'updatefromserver', 'data': self.data_cache}) for p in self.players]
 
+    def CalcAndPump(self,i):
+        # Game loop goes here?
+        # print(i)
+        # if i%3 == 0:
+        #     print("Run Game loop here!")
+        self.Pump()
+
 
 
 if __name__ == '__main__':
@@ -116,5 +124,5 @@ if __name__ == '__main__':
     server = MMXServer(localaddr=('localhost', 12000))
     print(server)
     while True:
-        server.Pump()
+        server.CalcAndPump(i)
         sleep(0.0001)
