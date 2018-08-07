@@ -6,6 +6,7 @@ import json
 import pygame
 import random
 import logging
+import traceback
 
 import MMX_Combat.constants as CN
 from MMX_Combat.weapons import EnemyBuster1
@@ -61,7 +62,7 @@ class BaseEnemy(pygame.sprite.Sprite):
 
     def follow(self):
         # TODO: Build out
-        # logging.debug(f"Following {target.id}!")
+        # logging.debug(f"Following {self.target.id}!")
         if self.following == 0:
             self.following = 45
         else:
@@ -73,27 +74,40 @@ class BaseEnemy(pygame.sprite.Sprite):
             hypot = math.hypot(self.target.rect.centerx - self.rect.centerx, self.target.rect.centery - self.rect.centery) / (CN.RUN_SPEED*.5)
             if hypot == 0:
                 hypot = 1
-            self.x_velocity = (self.target.rect.centerx - self.rect.centerx) / hypot
-            self.y_velocity = (self.target.rect.centery - self.rect.centery) / hypot
+            if hypot < self.rect.width / 6:
+                self.x_velocity = 0
+                self.y_velocity = 0
+                self.waiting = 60
+                self.following = 0
+            else:
+                self.x_velocity = (self.target.rect.centerx - self.rect.centerx) / hypot
+                self.y_velocity = (self.target.rect.centery - self.rect.centery) / hypot
 
 
     def patrol(self):
         # Find closest target
-        try:
-            old_dist = math.hypot(self.target.rect.centerx - self.rect.centerx, self.target.rect.centery - self.rect.centery)
-        except:
-            old_dist = 5000
+        old_dist = 5000
+        # if self.id == 'BaseEnemy_0':
+        #     logging.debug("I'm patrolling")
+        me_rect = self.rect
+
         for player in self.level.players:
             new_dist = math.hypot(player.rect.centerx - self.rect.centerx, player.rect.centery - self.rect.centery)
-            # if new_dist <= CN.SCREEN_HREZ/2 and new_dist < old_dist:
-            if new_dist < old_dist:
+            # if self.id == 'BaseEnemy_0':
+            #     logging.debug(f"Distance to potential new target: {new_dist} Me: {self.rect.center}, Old Target: {player.rect.center}")
+            if new_dist <= CN.SCREEN_HREZ/2 and new_dist < old_dist:
+                old_dist = new_dist
+            # if new_dist < old_dist:
                 self.target = player
+                # if self.id == 'BaseEnemy_0':
+                #     logging.debug(f"I have a new target: {self.target.id}")
                 self.waiting = 60
 
         if self.target:
             # Confirm the target is close enough to attack
-            dist = math.hypot(self.target.rect.centerx - self.rect.centerx, self.target.rect.centery - self.rect.centery)
+            dist = math.hypot(self.target.rect.centerx - me_rect.centerx, self.target.rect.centery - me_rect.centery)
             if dist > 600: #TODO: Fix arbitrary number
+                # logging.warning(f"Lost the target.... {dist}")
                 self.target = None
             else:
                 # We're close enough, attack!

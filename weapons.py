@@ -252,13 +252,9 @@ class PlayerSaber1(BaseWeapon, pygame.sprite.Sprite):
         self.image = pygame.Surface(current_state['size'])
         self.image.fill(self.color)
         self.rect = self.image.get_rect()
-        # self.rect.x = self.parent.rect.centerx - self.rect.width/2
-        # self.rect.y = self.parent.rect.centery - self.rect.height/2
 
         # Align to parent rect
         for attr, ref in current_state['attr'][cur_dir].items():
-            # if attr in ('right', 'left'):
-            #     logging.debug(f"{self.rem_frames}: Saber's {attr} goes on player {ref} when facing {cur_dir}\n")
             setattr(self.rect, attr, getattr(self.parent.rect, ref ))
 
     def update(self):

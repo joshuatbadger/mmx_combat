@@ -8,6 +8,8 @@ import datetime
 import argparse
 import threading
 
+from array import array, typecodes
+
 try:
     import pygame
 except ImportError as e:
@@ -63,7 +65,7 @@ def get_screen_size(res):
         w, h = res.split('x')
         return (int(w), int(h))
     except:
-        return CN.SCREEN_SIZE
+        return CN.SCREEN_REZ
 
 def get_proper_screen_size(w,h):
     '''
@@ -133,7 +135,7 @@ def start_game(args):
         level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, network=False)
     elif args.server:
         threading.Thread(target=start_server, daemon=True).start()
-        time.sleep(3)
+        # time.sleep(3)
         level = ServerTestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username)
     elif args.useserver:
         level = ServerTestLevel(args.useserver, CN.DEFAULT_SERVER_PORT, args.username)
@@ -159,6 +161,8 @@ def start_game(args):
         level.players.add(player)
 
     longest_proc_frame = 0
+
+    frame_history = array('f')
 
     player_camera = Camera(complex_camera, level.width, level.height)
 
@@ -199,6 +203,7 @@ def start_game(args):
             if event.type == pygame.QUIT:
                 logging.info(f"  Longest frame process: {longest_proc_frame} seconds")
                 frame_update = 1.0/CN.FPS
+                logging.info(f"  Average frame process: {sum(frame_history)/len(frame_history)} seconds")
                 logging.info(f"Single frame update max: {frame_update} seconds")
                 print("")
                 logging.info("            Code status: {}".format("All good\n" if frame_update > longest_proc_frame else "Too heavy\n"))
@@ -300,6 +305,7 @@ def start_game(args):
 
         player_camera.update(local_player)
         proc_end_time = (datetime.datetime.now() - proc_start_time).total_seconds()
+        frame_history.append(proc_end_time)
         if proc_end_time > longest_proc_frame:
             longest_proc_frame = proc_end_time
 

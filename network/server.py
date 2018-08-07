@@ -5,6 +5,7 @@ import json
 import pygame
 import socket
 import logging
+import threading
 import traceback
 
 from time import sleep
@@ -52,6 +53,48 @@ def get_lan_ip():
                 pass
     return ip
 
+DEFAULT_PLAYER_DICT = {
+                        "B_H": 16,
+                        "C_A_D": False,
+                        "DELAY_JUMP_PERIOD": 4,
+                        "D_M": 2,
+                        "D_T": 10,
+                        "G": 2,
+                        "J_S": 22,
+                        "M_S": 3,
+                        "R_S": 10,
+                        "S_V": 5,
+                        "W_D_S": 6,
+                        "W_J_V": 3,
+                        "c_d": False,
+                        "c_j": True,
+                        "c_l": 0,
+                        "color": "BLUE",
+                        "cur_alt_weapon": 0,
+                        "d_w": 0,
+                        "dashing": -1,
+                        "delay_jump": 4,
+                        "dir": "right",
+                        "ducking": False,
+                        "fire_wait": 0,
+                        "firing": False,
+                        "height": 42,
+                        "hp": 16,
+                        "inv": 0,
+                        "o_g": True,
+                        "run": False,
+                        "t_d": -1,
+                        "v_h": 0,
+                        "w_c": False,
+                        "w_h": False,
+                        "w_m_f_w": False,
+                        "width": 20,
+                        "x": -100,
+                        "x_v": 0,
+                        "y": -100,
+                        "y_v": 0
+                      }
+
 class MMXClientChannel(Channel):
 
     def Close(self):
@@ -61,10 +104,6 @@ class MMXClientChannel(Channel):
         # logging.debug(f"I think I got some data:\n{data}\n")
         pass
 
-    def Network_updateclient(self, data):
-        # logging.debug(f"Client wants me send them stuff!\n{data}")
-        self._server.SendToAll()
-
     def Network_updateserver(self, data):
         # logging.debug(f"Client wants me to do something!")
         self._server.UpdateData(data)
@@ -73,8 +112,9 @@ class MMXClientChannel(Channel):
     def Network_newconnection(self, data):
         # logging.debug(f"I have a new connection! (channel level)\n{data}")
         self.id = data['id']
-        self._server.UpdateData(data)
-        self._server.SendToAll()
+        self.Network_updateserver(data)
+        # self._server.UpdateData(data)
+        # self._server.SendToAll()
 
 class MMXServer(Server):
 
@@ -86,6 +126,7 @@ class MMXServer(Server):
         self.players = WeakKeyDictionary()
         self.update_interval = 0
         self.level = TestLevel(None, None, 'serverman', False, server_instance=self)
+        self.data_cache_lock = threading.Lock()
         logging.info(f"IP address: {get_lan_ip()}")
 
     def Connected(self, channel, addr):
@@ -94,32 +135,48 @@ class MMXServer(Server):
 
     def AddPlayer(self, player):
         logging.info(f"New Player{str(player.addr)}")
+        self.data_cache_lock.acquire()
         self.players[player] = True
+        logging.debug(json.dumps(self.data_cache, indent=4, sort_keys=True))
+        self.data_cache_lock.release()
 
     def DelPlayer(self, player):
         logging.info("Deleting Player" + str(player.addr))
+        self.data_cache_lock.acquire()
         del self.data_cache['player'][player.id]
         del self.players[player]
+        self.data_cache_lock.release()
 
     def UpdateData(self, data):
+        self.data_cache_lock.acquire()
         try:
-            # if data['type'] == 'player':
+            self.data_cache[data['type']][data['id']] = data.get('data', {})
 
-            # logging.debug(data)
-            self.data_cache[data['type']][data['id']] = data.get('data', dict())
-            # elif data['type'] == 'npc':
-            #     self.data_cache[data['npc']]
-            # else:
-            #     self.data_
-            # logging.debug(self.data_cache)
         except:
             logging.warning("Something broke in update data!")
             logging.warning(traceback.format_exc())
             logging.warning(data)
 
+        self.data_cache_lock.release()
+
     def SendToAll(self):
         # logging.debug("Current data_cache: ")
         # logging.debug(self.data_cache)
+        # confirm all player keys are in data cache before sending?
+        try:
+            cur_player_ref_list =    sorted([k.id for k in self.players])
+            # logging.debug(f'Players : {cur_player_ref_list}')
+            cur_player_cached_list = sorted([k for k in sorted(self.data_cache['player'].keys())])
+            # logging.debug(f'Players_: {cur_player_cached_list}')
+            if cur_player_ref_list == cur_player_cached_list:
+                [p.Send({'action': 'updatefromserver', 'data': self.data_cache}) for p in self.players]
+        except AttributeError as e:
+            logging.warning(e)
+            logging.warning("Skipping update this frame")
+        except:
+            logging.error(traceback.format_exc())
+        # logging.debug(self.data_cache['players'].keys())
+        # return
         [p.Send({'action': 'updatefromserver', 'data': self.data_cache}) for p in self.players]
 
     def CalcAndPump(self):

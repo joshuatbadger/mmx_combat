@@ -170,22 +170,20 @@ class Level(object):
                     self.player_names.add(player_name)
                     logging.info(f'{self.level_id} - {player_name} connected')
                     # logging.debug(f'{json.dumps(player_data, indent=4, sort_keys=True)}')
-                    remote_player = RemotePlayerObj(player_data.get('id'), self, player_data.get('color', 'MAGENTA'))
+                    remote_player = RemotePlayerObj(player_name, self, player_data.get('color', 'MAGENTA'))
                     self.players.add(remote_player)
                     self.all_sprite_list.add(remote_player)
             except KeyError as e:
                 logging.warning('Stuff broke, yo.')
                 self.players.remove(remote_player)
                 self.all_sprite_list.remove(remote_player)
-                pass
+                self.player_names.remove(player_name)
+                logging.warning(traceback.format_exc())
+                sys.exit(9)
             except:
                 logging.warning(traceback.format_exc())
 
     def update_npc_data(self):
-        # logging.debug(self.level_id)
-        # logging.debug(self.data_cache)
-        # return
-        # logging.info(f"Data!\n{json.dumps(self.data_cache['npc'], indent=4)}")
         try:
             for npc_id, npc_data in self.data_cache['npc'].items():
                 if npc_data == {}:
@@ -227,14 +225,3 @@ class ServerTestLevel(Level):
         super().__init__(server_ip, server_port, id, network, server_instance=server_instance)
         level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_02.txt"))
         self.build_level(level_path)
-        # self.build_enemies()
-
-    # def build_level(level_path):
-        # self.server.
-
-    # def build_enemies(self):
-    #     # logging.debug("I'm building my enemies now, yo.")
-    #     for i, point in enumerate(self.enemy_spawn_points):
-    #         _ = BaseEnemy(i, *point, 40, 40, self, 3, from_network=True)
-    #         self.all_sprite_list.add(_)
-    #         self.npc_enemies.add(_)
