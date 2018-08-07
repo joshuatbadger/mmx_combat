@@ -4,6 +4,7 @@ import json
 import math
 import pygame
 import random
+import logging
 
 
 from abc import ABCMeta, abstractmethod
@@ -11,6 +12,8 @@ from collections import deque
 from .weapons import PlayerBuster1, PlayerSaber1
 
 from . import constants as CN
+
+logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
 
 class BasePlayerObj(metaclass=ABCMeta):
     '''
@@ -33,7 +36,7 @@ class BasePlayerObj(metaclass=ABCMeta):
         self.CAN_AIR_DASH = None
         self.BASE_HEALTH = None
         self.LEVEL = None
-        self.username = None
+        self.id = None
         self.MAX_SHOTS = None
         # self.
 
@@ -61,7 +64,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
     Base class for local player objects. Inherits pygame Sprite, BasePlayerObj,
     and python object.
     '''
-    def __init__(self, username, level, jstick, color, pu_dict=None):
+    def __init__(self, id, level, jstick, color, pu_dict=None):
         super(BasePlayerObj, self).__init__()
         # Initialize all player possible states with real values
         self.on_ground = True
@@ -88,7 +91,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.WALL_DRAG_SPEED = CN.WALL_DRAG_SPEED
         self.MAX_SHOTS = CN.MAX_SHOTS
         self.STAGGER_VELOCITY = CN.STAGGER_VELOCITY
-        self.username = username
+        self.FLICKER = [0,255]
+        self.id = id
         self.jstick = jstick
         self.color = color.upper()
 
@@ -109,10 +113,14 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.health = self.BASE_HEALTH
         self.wait_camera = False
         self.delay_jump = self.DELAY_JUMP_PERIOD
-        self.y_vel_history = deque([],self.delay_jump)
         self.alt_weapons = [PlayerSaber1]
         self.cur_alt_weapon = 0
-        self.wait_weapon = False
+        self.wait_move_for_weapon = False
+        self.fire_wait = 0
+        # Add a y velocity history to give a jump grace period after running off a cliff
+        self.y_vel_history = deque([],self.delay_jump)
+        # Setup flicker values for invulnerable periods
+        self._flicker_vals = self.FLICKER
 
 
         # Initialize current key presses and controller dpad positions
@@ -139,7 +147,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
     def _display_stats(self):
         for attrib in dir(self):
             if not attrib.startswith("_"):
-                print(attrib)
+                logging.debug(attrib)
         # pass
 
     def _get_spawnpoint(self):
@@ -162,11 +170,29 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             return
 
         # If we're taking damage, reduce the countdown before we can regain control
-        if self.taking_damage > 0:
-            self.taking_damage -= 1
+        # if self.taking_damage > 0:
+        #     self.taking_damage -= 1
+        #
+        # if self.invulnerable > 0:
+        #     self.invulnerable -= 1
+        #
+        # if self.fire_wait > 0:
+        #     self.fire_wait -= 1
 
-        if self.invulnerable:
-            self.invulnerable -= 1
+        waiters = ('taking_damage', 'invulnerable', 'fire_wait')
+        for i, delay in enumerate(waiters):
+            delay_attr = getattr(self, delay)
+            if delay_attr > 0:
+                setattr(self, delay, delay_attr - 1)
+
+        # Flash for invulnerable time
+        if self.invulnerable > 0:
+            # self.image.set_alpha([255, 255, 0, 0][self.invulnerable % 4])
+            if self.invulnerable % 2 == 0:
+                self._flicker_vals = self._flicker_vals[-1:] + self._flicker_vals[:-1]
+            self.image.set_alpha(self._flicker_vals[0])
+        else:
+            self.image.set_alpha(255)
 
         # Get current key presses
         self._cur_keys = pygame.key.get_pressed()
@@ -292,8 +318,8 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
         if self.LEVEL.server_addr:
             # Handle network communication
-            self.LEVEL.chat_client.send_update_to_server(self._build_player_dict())
-            # self.LEVEL.chat_client.send_update_to_server({'un': self.username, 'data': 24})
+            self.LEVEL.chat_client.send_player_data_update_to_server(self._build_player_dict())
+            # self.LEVEL.chat_client.send_player_data_update_to_server({'un': self.id, 'data': 24})
             self.LEVEL.chat_client.Loop()
 
     def _build_player_dict(self):
@@ -342,7 +368,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
     def calc_gravity(self):
         """Are we gravity-ing?"""
         if self.taking_damage > 0:
-            # print("currently taking damage, not gravity-ing")
+            # logging.debug("currently taking damage, not gravity-ing")
             return
         if not self._check_control_jump() and self.y_velocity < 0:
             # We've released space and are moving upwards. Stop moving upwards.
@@ -414,7 +440,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
             # Build x velocity below, but first check for dashability
             dash = bool(self._check_control_dash() and self.can_dash)
-            # print(f"dash? {dash}")
+            # logging.debug(f"dash? {dash}")
             if dash:
                 self.dashing = 0
 
@@ -437,7 +463,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         if self.velocity_hold == 0:
             self.direction = 'left'
             if not self._check_control_right() and not self.ducking:
-                if not (self.on_ground and self.wait_weapon):
+                if not (self.on_ground and self.wait_move_for_weapon):
                     self.x_velocity = -1*self.RUN_SPEED
                 else:
                     self.x_velocity = 0
@@ -448,7 +474,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         if self.velocity_hold == 0:
             self.direction = 'right'
             if not self._check_control_left() and not self.ducking:
-                if not (self.on_ground and self.wait_weapon):
+                if not (self.on_ground and self.wait_move_for_weapon):
                     self.x_velocity = self.RUN_SPEED
                 else:
                     self.x_velocity = 0
@@ -465,19 +491,20 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             self.can_dash = False
 
     def fire(self):
-        if len(self.shot_weapons) < self.MAX_SHOTS and not self.wait_weapon:
+        if len(self.shot_weapons) < self.MAX_SHOTS and not self.wait_move_for_weapon and not self.fire_wait and self.taking_damage <= 0:
             if self.charge_level < 15:
                 new_buster = PlayerBuster1(self, 1, [5,5], CN.YELLOW)
             elif self.charge_level < 50:
                 new_buster = PlayerBuster1(self, 3, [10,5], CN.CYAN)
             elif self.charge_level >= 50:
-                new_buster = PlayerBuster1(self, 10, [30,30], CN.GREEN, False)
+                new_buster = PlayerBuster1(self, 10, [30,30], CN.GREEN, False, False)
             self.shot_weapons.append(new_buster)
             self.LEVEL.all_sprite_list.add(new_buster)
+            self.fire_wait = 4
             self.discharge()
 
     def alt_fire(self):
-        if not self.wait_weapon:
+        if not self.wait_move_for_weapon and not self.fire_wait and self.taking_damage <= 0:
             weapon = self.alt_weapons[self.cur_alt_weapon](self)
             self.LEVEL.all_sprite_list.add(weapon)
 
@@ -503,19 +530,21 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.change_rect(self.standing_image, self.standing_rect)
 
     def damage(self, amount):
-        if self.invulnerable > 0:
-            return
-        self.health -= amount
-        self.change_rect(self.standing_image, self.standing_rect)
-        if self.health <= 0:
-            self.die()
-        else:
-            self.x_velocity = self.STAGGER_VELOCITY *((-1)**['left','right'].index(self.direction))
-            self.y_velocity = (-1) * self.STAGGER_VELOCITY
-            self.velocity_hold = 10
-            self.on_ground = False
-            self.taking_damage = 8
-            self.invulnerable = 45
+        # Currently testing server enemy processing. remove pass and uncomment damage function when done.
+        pass
+        # if self.invulnerable > 0:
+        #     return
+        # self.health -= amount
+        # self.change_rect(self.standing_image, self.standing_rect)
+        # if self.health <= 0:
+        #     self.die()
+        # else:
+        #     self.x_velocity = self.STAGGER_VELOCITY *((-1)**['left','right'].index(self.direction))
+        #     self.y_velocity = (-1) * self.STAGGER_VELOCITY
+        #     self.velocity_hold = 10
+        #     self.on_ground = False
+        #     self.taking_damage = 8
+        #     self.invulnerable = 45
 
     def die(self):
         self.x_velocity = 0
@@ -533,11 +562,12 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.image = self.standing_image
         self.rect = self.standing_rect
         self.rect.x, self.rect.y = self._get_spawnpoint()
+        self.health = self.BASE_HEALTH
         self.LEVEL.all_sprite_list.add(self)
 
 
 class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
-    def __init__(self, username, level, color):
+    def __init__(self, id, level, color):
         super(BasePlayerObj, self).__init__()
         # Initialize all player possible states with real values
         self.on_ground = True
@@ -563,7 +593,7 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.WALL_DRAG_SPEED = CN.WALL_DRAG_SPEED
         self.MAX_SHOTS = CN.MAX_SHOTS
         self.STAGGER_VELOCITY = CN.STAGGER_VELOCITY
-        self.username = username
+        self.id = id
         self.color = color
 
         # variables
@@ -585,21 +615,21 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.rect = self.image.get_rect()
         self.rect.x, self.rect.y = (-800,-800)
 
-        print(f"Instantiating new remote player {self.username}!")
+        logging.info(f"Instantiating new remote player {self.id}!")
 
     def update(self):
-        all_player_dict = self.LEVEL.player_data
-        # print(f"Updating {self.username}")
+        all_player_dict = self.LEVEL.data_cache
+        # logging.debug(f"Updating {self.id}")
         try:
-            my_player_dict = all_player_dict[self.username]
+            my_player_dict = all_player_dict['player'][self.id]
         except KeyError:
-            print(f"Oops, {self.username} is gone!")
+            logging.warning(f"Oops, {self.id} is gone!")
             self.kill()
             return
 
-        # print(json.dumps(my_player_dict, indent=4, sort_keys=True))
+        # logging.debug(json.dumps(my_player_dict, indent=4, sort_keys=True))
         for attr, v in my_player_dict.items():
-            if attr not in ('x', 'y', 'width', 'height'):
+            if attr not in ('x', 'y', 'width', 'height') and attr[0] != attr.upper()[0]:
                 setattr(self, attr, v)
         self.rect.x = my_player_dict['x']
         self.rect.width = my_player_dict['width']
@@ -634,7 +664,7 @@ class DashEcho(pygame.sprite.Sprite):
 
 class DummyJoystick:
     def __init__(self):
-        print("Dummy joystick, dawg.")
+        logging.debug("Dummy joystick, dawg.")
 
     def get_hat(self, hat_id):
         return (0,0)

@@ -1,10 +1,12 @@
 import math
 import pygame
+import logging
 
 import MMX_Combat.constants as CN
 
 from abc import ABCMeta, abstractmethod
 
+logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
 
 class BaseWeapon(metaclass=ABCMeta):
     def __init__(self):
@@ -22,7 +24,7 @@ class BaseWeapon(metaclass=ABCMeta):
         pass
 
 class PlayerBuster1(BaseWeapon, pygame.sprite.Sprite):
-    def __init__(self, parent, energy, size, color, destroyed_by_enemies=True):
+    def __init__(self, parent, energy, size, color, destroyed_by_enemies=True, destroyed_by_walls=True):
         # call parent's constructor
         super(BaseWeapon, self).__init__()
 
@@ -32,6 +34,7 @@ class PlayerBuster1(BaseWeapon, pygame.sprite.Sprite):
         self.size = size
         self.color = color
         self.destroyed_by_enemies = destroyed_by_enemies
+        self.destroyed_by_walls = destroyed_by_walls
 
         self.build_image_and_rect()
 
@@ -58,8 +61,9 @@ class PlayerBuster1(BaseWeapon, pygame.sprite.Sprite):
         block_hit_list = pygame.sprite.spritecollide(self, self.walls, False)
         for block in block_hit_list:
             block.damage(self.energy)
-            self.destroy()
-            return
+            if self.destroyed_by_walls:
+                self.destroy()
+                return
 
         # Check for enemy collisions
         enemy_hit_list = pygame.sprite.spritecollide(self, self.parent.LEVEL.npc_enemies, False)
@@ -86,13 +90,13 @@ class PlayerSaber1(BaseWeapon, pygame.sprite.Sprite):
     def __init__(self, parent, color=CN.YELLOW, energy=2):
         # call parent's constructor
         super(BaseWeapon, self).__init__()
-        print('')
+        # print('')
         self.parent = parent
         self.energy = energy
         self.color = color
         # self.build_image_and_rect()
         self.rem_frames = 10
-        self.parent.wait_weapon = True
+        self.parent.wait_move_for_weapon = True
         self.parent.fire_wait = self.rem_frames + 1
         # Build hitbox data for what frame we're on. This will eventually be replaced by sprites.
         self.hitbox_dict = {
@@ -242,7 +246,7 @@ class PlayerSaber1(BaseWeapon, pygame.sprite.Sprite):
                                 }
 
     def build_image_and_rect(self):
-        # print("Updating Saber")
+        # logging.debug("Updating Saber")
         current_state = self.hitbox_dict[self.rem_frames]
         cur_dir = self.parent.direction
         self.image = pygame.Surface(current_state['size'])
@@ -254,11 +258,11 @@ class PlayerSaber1(BaseWeapon, pygame.sprite.Sprite):
         # Align to parent rect
         for attr, ref in current_state['attr'][cur_dir].items():
             # if attr in ('right', 'left'):
-            #     print(f"{self.rem_frames}: Saber's {attr} goes on player {ref} when facing {cur_dir}\n")
+            #     logging.debug(f"{self.rem_frames}: Saber's {attr} goes on player {ref} when facing {cur_dir}\n")
             setattr(self.rect, attr, getattr(self.parent.rect, ref ))
 
     def update(self):
-        # print(f'Saber remaining frames: {self.rem_frames}')
+        # logging.debug(f'Saber remaining frames: {self.rem_frames}')
         if self.rem_frames == -1:
             self.destroy()
             return
@@ -273,7 +277,7 @@ class PlayerSaber1(BaseWeapon, pygame.sprite.Sprite):
     def destroy(self):
         if self in self.parent.shot_weapons:
             self.parent.shot_weapons.remove(self)
-        self.parent.wait_weapon = False
+        self.parent.wait_move_for_weapon = False
         self.kill()
 
 
@@ -281,12 +285,12 @@ class EnemyBuster1(BaseWeapon, pygame.sprite.Sprite):
     def __init__(self, parent):
         # call parent's constructor
         super(BaseWeapon, self).__init__()
-        # print("Spawning enemy weapon")
+        # logging.debug("Spawning enemy weapon")
 
         self.walls = parent.level.wall_list
         self.parent = parent
 
-        self.image = pygame.Surface([5,5])
+        self.image = pygame.Surface([15,15])
         self.image.fill(CN.MAGENTA)
         self.rect = self.image.get_rect()
         self.rect.x = self.parent.rect.centerx - self.rect.width/2
@@ -300,7 +304,7 @@ class EnemyBuster1(BaseWeapon, pygame.sprite.Sprite):
         self.y_velocity = (self.parent.target.rect.centery - self.parent.rect.centery) / self.hypot
 
     def update(self):
-        # print("Updating the enemy weapon")
+        # logging.debug("Updating the enemy weapon")
         if self.rem_frames > 0:
             self.rem_frames -= 1
         if self.rem_frames == 0:

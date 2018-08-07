@@ -78,6 +78,7 @@ TRANSFER_DICT = {
                     "username": "un",
                     "velocity_hold": 'v_h',
                     "wait_camera": 'w_c',
+                    "wait_move_for_weapon": 'w_m_f_w',
                     "wall_hold": 'w_h',
                     "x_velocity": 'x_v',
                     "y_velocity": 'y_v',

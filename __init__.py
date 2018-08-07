@@ -2,6 +2,8 @@ import os
 import sys
 os.environ["PYTHONDONTWRITEBYTECODE"] = 'stobbit'
 
+import time
+import logging
 import datetime
 import argparse
 import threading
@@ -11,6 +13,8 @@ try:
 except ImportError as e:
     print("Can't import `pygame`. Did you remember to activate the virtual environment?")
     sys.exit(5)
+
+logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -29,8 +33,8 @@ def get_args():
 def test(args):
     # Testing basic movement, weapons, environment here.
     os.system("cls")
-    print("Beginning the pygame test\n\n")
-    print(f"pygame version: {pygame.__version__}")
+    logging.error("Beginning the pygame test\n\n")
+    logging.info(f"pygame version: {pygame.__version__}")
     global USERNAME
 
     USERNAME = args.username
@@ -82,17 +86,12 @@ def start_server():
     from MMX_Combat.network.server import MMXServer
     from time import sleep
     server = MMXServer(localaddr=('127.0.0.1', 12000))
-    print(server)
-    i = 0
+    logging.debug(server)
     pygame.init()
     server_clock = pygame.time.Clock()
-    # Update thrice as many times as there are players per frame
-    interval = float(len(server.players) * 3)
     while True:
-        i += 1
-        i = i % int(interval)
-        server.CalcAndPump(i)
-        server_clock.tick(CN.FPS/interval)
+        server.CalcAndPump()
+        server_clock.tick(CN.FPS)
 
 def start_game(args):
     '''
@@ -123,22 +122,23 @@ def start_game(args):
 
     attached_joysticks = pygame.joystick.get_count()
     if attached_joysticks:
-        # print(f"Attached joysticks: {attached_joysticks}")
-        # print("Getting first joystick")
+        # logging.debug(f"Attached joysticks: {attached_joysticks}")
+        # logging.debug("Getting first joystick")
         jstick = pygame.joystick.Joystick(0)
         jstick.init()
     else:
         jstick = DummyJoystick()
 
     if args.solo:
-        level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, False)
+        level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, network=False)
     elif args.server:
         threading.Thread(target=start_server, daemon=True).start()
-        level = ServerTestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, True)
+        time.sleep(3)
+        level = ServerTestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username)
     elif args.useserver:
-        level = ServerTestLevel(args.useserver, CN.DEFAULT_SERVER_PORT, args.username, True)
+        level = ServerTestLevel(args.useserver, CN.DEFAULT_SERVER_PORT, args.username)
 
-    # print(f'Level block size: ({level.block_width}x{level.block_height})')
+    # logging.debug(f'Level block size: ({level.block_width}x{level.block_height})')
     MINIMAP_SCREEN = pygame.Surface((level.width, level.height))
     show_minimap = False
 
@@ -197,36 +197,36 @@ def start_game(args):
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                print(f"  Longest frame process: {longest_proc_frame} seconds")
+                logging.info(f"  Longest frame process: {longest_proc_frame} seconds")
                 frame_update = 1.0/CN.FPS
-                print(f"Single frame update max: {frame_update} seconds")
+                logging.info(f"Single frame update max: {frame_update} seconds")
                 print("")
-                print("            Code status: {}".format("All good\n" if frame_update > longest_proc_frame else "Too heavy\n"))
+                logging.info("            Code status: {}".format("All good\n" if frame_update > longest_proc_frame else "Too heavy\n"))
                 sys.exit()
 
             # elif event.type == pygame.ACTIVEEVENT:
-            #     # print(event)
-            #     # print(event.state)
-            #     print('state:', event.state, '| gain:', event.gain,)
+            #     # logging.debug(event)
+            #     # logging.debug(event.state)
+            #     logging.debug('state:', event.state, '| gain:', event.gain,)
             #     if event.state == 1:
             #         if event.gain == 0:
-            #             print("| mouse out",)
+            #             logging.debug("| mouse out",)
             #         elif event.gain == 1:
-            #             print("| mouse in",)
+            #             logging.debug("| mouse in",)
             #     elif event.state == 2:
             #         if event.gain == 0:
-            #             print("| titlebar pressed",)
+            #             logging.debug("| titlebar pressed",)
             #         elif event.gain == 1:
-            #             print("| titlebar unpressed",)
+            #             logging.debug("| titlebar unpressed",)
             #     elif event.state == 6:
             #         if event.gain == 0:
-            #             print("| window minimized",)
+            #             logging.debug("| window minimized",)
             #     elif event.state == 4:
             #         if event.gain == 1:
-            #             print("| window normal",)
+            #             logging.debug("| window normal",)
 
             elif event.type == pygame.VIDEORESIZE:
-                # print(f"Resizing to {event.dict['size']}!")
+                # logging.debug(f"Resizing to {event.dict['size']}!")
                 SCREEN = pygame.display.set_mode(get_proper_screen_size(*event.dict['size']), pygame.HWSURFACE | pygame.DOUBLEBUF | pygame.RESIZABLE)
 
             # Check for keys being released.
@@ -261,11 +261,11 @@ def start_game(args):
                     level.print_data_cache()
 
             elif event.type == pygame.JOYBUTTONDOWN:
-                # print(f"Joystick button {event.button} pressed.")
+                # logging.debug(f"Joystick button {event.button} pressed.")
                 if event.button == 2:
                     local_player.fire()
             elif event.type == pygame.JOYBUTTONUP:
-                # print(f"Joystick button {event.button} released.")
+                # logging.debug(f"Joystick button {event.button} released.")
                 if event.button == 0:
                     local_player.allow_jump()
                 if event.button == 1:
@@ -289,7 +289,8 @@ def start_game(args):
         # Update info on all players
         proc_start_time = datetime.datetime.now()
 
-        level.update_player_data(local_player.username)
+        level.update_player_data()
+        level.update_npc_data()
         # TODO: check for conflicts between local_player local data and server data
 
         if local_player not in level.all_sprite_list:
@@ -315,16 +316,16 @@ def start_game(args):
 
         # Display debug and/or controls
         if DEBUG:
-            text_surf, text_rect = make_text("{}: {}".format('username',str(local_player.__dict__['username'])), CN.WHITE, CN.BLACK, 50, 10)
+            text_surf, text_rect = make_text("{}: {}".format('id',str(local_player.__dict__['id'])), CN.WHITE, CN.BLACK, 50, 10)
             SCREEN.blit(text_surf, text_rect)
             i = 1
             text_surf, text_rect = make_text("{}: {}".format('FPS',str(CN.FPS)), CN.WHITE, CN.BLACK, 50, 10+(i*1.1*CN.BASICFONTSIZE))
             SCREEN.blit(text_surf, text_rect)
             i+=1
             for k,v in sorted(local_player.__dict__.items()):
-                # print(k)
-                # print("\t" + str(type(v)))
-                if k != 'username' and not callable(v) and not k.startswith("_") and k[0] != k[0].upper() and isinstance(v, (int, bool, list)):
+                # logging.debug(k)
+                # logging.debug("\t" + str(type(v)))
+                if k != 'id' and not callable(v) and not k.startswith("_") and k[0] != k[0].upper() and isinstance(v, (int, bool, list)):
                     text_surf, text_rect = make_text("{}: {} ({})".format(k,str(v), type(v)), CN.WHITE, CN.BLACK, 50, 10+(i*1.1*CN.BASICFONTSIZE))
                     SCREEN.blit(text_surf, text_rect)
                     i += 1
@@ -340,7 +341,7 @@ def start_game(args):
 
 
         pygame.display.flip()
-        # print(f'{threading.activeCount()} active threads!')
+        # logging.debug(f'{threading.activeCount()} active threads!')
         FPSCLOCK.tick(CN.FPS)
 
 
@@ -351,5 +352,5 @@ if __name__ == "__main__":
         sys.path.append(mmx_main_path)
     import MMX_Combat.constants as CN
     args = get_args()
-    # print(args)
+    # logging.debug(args)
     test(args)

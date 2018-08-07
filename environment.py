@@ -1,7 +1,9 @@
 import os
 import sys
 import json
+import time
 import pygame
+import logging
 import traceback
 import more_itertools as mit
 
@@ -12,6 +14,8 @@ from MMX_Combat.player import RemotePlayerObj
 from MMX_Combat.network.client import MMXClient
 
 from abc import ABCMeta, abstractmethod
+
+logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
 
 def find_ranges(iterable):
     """Yield range of consecutive numbers."""
@@ -47,25 +51,37 @@ class SpikeWall(BaseEnvironmentObj):
 
 class Level(object):
     """Generic Base Level class"""
-    def __init__(self, server_ip, server_port, username, network=True):
+    def __init__(self, server_ip, server_port, id, network=True, server_instance=None):
+        self.level_id = f'{"server_" if server_instance else ""}{time.time_ns()}'
+        logging.info(f"LEVEL_ID: {self.level_id}")
         self.wall_list = pygame.sprite.Group()
         self.misc_objs = pygame.sprite.Group()
         self.npc_enemies = pygame.sprite.Group()
+        self.npc_ids = set()
         self.all_sprite_list = pygame.sprite.Group()
         self.players = pygame.sprite.Group()
         self.player_names = set()
         self.spawn_points = []
         self.enemy_spawn_points = []
-        self.player_data = dict()
         if network:
             self.server_addr = server_ip, server_port
-            self.chat_client = MMXClient(*self.server_addr, username, self )
+            self.chat_client = MMXClient(*self.server_addr, id, self )
         else:
             self.server_addr = None
             self.chat_client = None
 
+        if server_instance:
+            self.server = server_instance
+            logging.debug(f"Server instance: {self.server}")
+            self.data_cache = self.server.data_cache
+
+        else:
+            self.server = None
+            self.data_cache = {'player': dict(), 'npc': dict(), 'weap': dict()}
+
+
     def print_data_cache(self):
-        print(json.dumps(self.player_data, indent=4))
+        logging.debug(json.dumps(self.data_cache, indent=4))
 
     def update(self):
         self.wall_list.update()
@@ -78,7 +94,7 @@ class Level(object):
         self.misc_objs.draw(screen)
         self.all_sprite_list.draw(screen)
 
-    def build_level(self, level_path):
+    def build_level(self, level_path, network=True):
         with open(level_path) as level:
             l = level.readlines()
         self.build_level_objs(l)
@@ -98,7 +114,7 @@ class Level(object):
                     self.enemy_spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
                 # Find spawn points (max 10 for now)
                 elif char in [str(c) for c in range(0,10)]:
-                    # print(f"Found spawn point {char}!")
+                    # logging.debug(f"Found spawn point {char}!")
                     self.spawn_points.append([x*CN.LEVEL_TILE_SIZE, y*CN.LEVEL_TILE_SIZE])
 
         self._parse_walls(wall_locations_v_lines)
@@ -113,17 +129,17 @@ class Level(object):
         wall_groups = dict()
         for block in wall_block_list:
             # wall_groups.get(block[1], []).append(block[0])
-            # print(block)
+            # logging.debug(block)
             if wall_groups.get(block[0], None) == None:
                 wall_groups[block[0]] = []
             wall_groups[block[0]].append(block[1])
-        # print(wall_groups)
+        # logging.debug(wall_groups)
         wall_objs = dict()
         for k,v in sorted(wall_groups.items()):
-            # print(k)
+            # logging.debug(k)
             wall_objs[k] = list(find_ranges(v))
             for b in wall_objs[k]:
-                # print(f"\t{b}")
+                # logging.debug(f"\t{b}")
                 if isinstance(b, int):
                     wall = BaseEnvironmentObj(k*CN.LEVEL_TILE_SIZE,b*CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE,CN.LEVEL_TILE_SIZE)
                 else:
@@ -131,44 +147,92 @@ class Level(object):
                 self.all_sprite_list.add(wall)
                 self.wall_list.add(wall)
 
-        # print(wall_objs)
+        # logging.debug(wall_objs)
 
-    def build_enemies(self):
-        # print("I'm building my enemies now, yo.")
-        for point in self.enemy_spawn_points:
-            _ = BaseEnemy(*point, 40, 40, self, 3)
-            self.all_sprite_list.add(_)
-            self.npc_enemies.add(_)
+    def build_enemies(self, network=False):
+        # logging.debug("I'm building my enemies now, yo.")
+        if not network:
+            for i, point in enumerate(self.enemy_spawn_points):
+                _ = BaseEnemy(i, *point, 40, 40, self, 3)
+                self.all_sprite_list.add(_)
+                self.npc_enemies.add(_)
+                self.npc_ids.add(_.id)
 
-    def update_player_data(self, username):
-        # print(self.player_data.keys())
-        for player_name, player_data in self.player_data.items():
-            # print(player_name)
+        else:
+            pass
+
+    def update_player_data(self):
+        # logging.debug(self.data_cache.keys())
+        for player_name, player_data in self.data_cache['player'].items():
+            # logging.debug(player_name)
             try:
                 if player_name not in self.player_names:
                     self.player_names.add(player_name)
-                    print(f'{player_name} connected')
-                    remote_player = RemotePlayerObj(player_data['un'], self, player_data['color'])
+                    logging.info(f'{self.level_id} - {player_name} connected')
+                    # logging.debug(f'{json.dumps(player_data, indent=4, sort_keys=True)}')
+                    remote_player = RemotePlayerObj(player_data.get('id'), self, player_data.get('color', 'MAGENTA'))
                     self.players.add(remote_player)
                     self.all_sprite_list.add(remote_player)
+            except KeyError as e:
+                logging.warning('Stuff broke, yo.')
+                pass
             except:
-                print(traceback.format_exc())
+                logging.warning(traceback.format_exc())
+
+    def update_npc_data(self):
+        # logging.debug(self.level_id)
+        # logging.debug(self.data_cache)
+        # return
+        # logging.info(f"Data!\n{json.dumps(self.data_cache['npc'], indent=4)}")
+        try:
+            for npc_id, npc_data in self.data_cache['npc'].items():
+                if npc_data == {}:
+                    continue
+                # logging.debug(f'{npc_id}: {npc_data}')
+                try:
+                    if npc_id not in self.npc_ids:
+                        self.npc_ids.add(npc_id)
+                        logging.debug(f'Got new NPC "{npc_id}"')
+                        # logging.debug(f'{json.dumps(npc_data, indent=4)}"')
+                        new_npc = BaseEnemy(npc_id, npc_data['x'], npc_data['y'], npc_data['width'], npc_data['height'], self, npc_data['health'], from_network=True)
+                        self.all_sprite_list.add(new_npc)
+                except KeyError as e:
+                    logging.debug(f'{json.dumps(self.data_cache, indent=4, sort_keys=True)}')
+                    logging.warning(traceback.format_exc())
+                    sys.exit(9)
+                except:
+                    logging.warning(traceback.format_exc())
+
+        except RuntimeError:
+            # logging.info(f"Data!\n{json.dumps(self.data_cache['npc'], indent=4)}")
+            sys.exit(8)
+
 
 class RemoteLevel(Level):
-    def __init__(self, server_ip, server_port, username):
+    def __init__(self, server_ip, server_port, id):
         super().__init__('127.0.0.1', 12000, 'Server')
 
 
 class TestLevel(Level):
-    def __init__(self, server_ip, server_port, username, network=True):
-        super().__init__(server_ip, server_port, username, network)
+    def __init__(self, server_ip, server_port, id, network=True, server_instance=False):
+        super().__init__(server_ip, server_port, id, network, server_instance=server_instance)
         level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_02.txt"))
         self.build_level(level_path)
         self.build_enemies()
 
 class ServerTestLevel(Level):
-    def __init__(self, server_ip, server_port, username, network=True):
-        super().__init__(server_ip, server_port, username, network)
+    def __init__(self, server_ip, server_port, id, network=True, server_instance=None):
+        super().__init__(server_ip, server_port, id, network, server_instance=server_instance)
         level_path = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "levels", "level_02.txt"))
         self.build_level(level_path)
-        self.build_enemies()
+        # self.build_enemies()
+
+    # def build_level(level_path):
+        # self.server.
+
+    # def build_enemies(self):
+    #     # logging.debug("I'm building my enemies now, yo.")
+    #     for i, point in enumerate(self.enemy_spawn_points):
+    #         _ = BaseEnemy(i, *point, 40, 40, self, 3, from_network=True)
+    #         self.all_sprite_list.add(_)
+    #         self.npc_enemies.add(_)

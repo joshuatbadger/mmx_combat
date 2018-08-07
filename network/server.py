@@ -4,6 +4,8 @@ import sys
 import json
 import pygame
 import socket
+import logging
+import traceback
 
 from time import sleep
 from weakref import WeakKeyDictionary
@@ -11,11 +13,13 @@ from weakref import WeakKeyDictionary
 from PodSixNet.Channel import Channel
 from PodSixNet.Server import Server
 
+logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
+
 try:
-    from .. import environment
-    print("Server successfully imported stuff!")
+    from ..environment import TestLevel
+    logging.info("Server successfully imported stuff!")
 except (ValueError, ImportError):
-    print("Server couldn't import.... try importing explicitly")
+    logging.warning("Server couldn't import.... try importing explicitly")
 
 if os.name != "nt":
     import fcntl
@@ -54,21 +58,23 @@ class MMXClientChannel(Channel):
         self._server.DelPlayer(self)
 
     def Network(self, data):
-        # print(f"I think I got some data:\n{data}\n")
+        # logging.debug(f"I think I got some data:\n{data}\n")
         pass
 
     def Network_updateclient(self, data):
-        # print(f"Client wants me send them stuff!\n{data}")
+        # logging.debug(f"Client wants me send them stuff!\n{data}")
         self._server.SendToAll()
 
     def Network_updateserver(self, data):
-        # print(f"Client wants me to do something!")
+        # logging.debug(f"Client wants me to do something!")
         self._server.UpdateData(data)
         self._server.SendToAll()
 
     def Network_newconnection(self, data):
-        # print(f"I have a new connection! (channel level)\n{data}")
-        self.username = data['un']
+        # logging.debug(f"I have a new connection! (channel level)\n{data}")
+        self.id = data['id']
+        self._server.UpdateData(data)
+        self._server.SendToAll()
 
 class MMXServer(Server):
 
@@ -76,41 +82,50 @@ class MMXServer(Server):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.data_cache = dict()
+        self.data_cache = {'player': dict(), 'npc': dict(), 'weap': dict()}
         self.players = WeakKeyDictionary()
-        # self.level =
-        print(f"IP address: {get_lan_ip()}")
+        self.update_interval = 0
+        self.level = TestLevel(None, None, 'serverman', False, server_instance=self)
+        logging.info(f"IP address: {get_lan_ip()}")
 
     def Connected(self, channel, addr):
-        # print(f"We have a new connection from {addr}! (server level)")
+        # logging.debug(f"We have a new connection from {addr}! (server level)")
         self.AddPlayer(channel)
 
     def AddPlayer(self, player):
-        print("New Player" + str(player.addr))
+        logging.info(f"New Player{str(player.addr)}")
         self.players[player] = True
 
     def DelPlayer(self, player):
-        print("Deleting Player" + str(player.addr))
-        del self.data_cache[player.username]
+        logging.info("Deleting Player" + str(player.addr))
+        del self.data_cache['player'][player.id]
         del self.players[player]
 
     def UpdateData(self, data):
         try:
-            self.data_cache[data['un']] = data['data']
-            # print(self.data_cache)
+            # if data['type'] == 'player':
+
+            # logging.debug(data)
+            self.data_cache[data['type']][data['id']] = data.get('data', dict())
+            # elif data['type'] == 'npc':
+            #     self.data_cache[data['npc']]
+            # else:
+            #     self.data_
+            # logging.debug(self.data_cache)
         except:
-            print("Something broke in update data!")
+            logging.warning("Something broke in update data!")
+            logging.warning(traceback.format_exc())
+            logging.warning(data)
 
     def SendToAll(self):
-        # print("Current data_cache: ")
-        # print(self.data_cache)
+        # logging.debug("Current data_cache: ")
+        # logging.debug(self.data_cache)
         [p.Send({'action': 'updatefromserver', 'data': self.data_cache}) for p in self.players]
 
-    def CalcAndPump(self,i):
-        # Game loop goes here?
-        # print(i)
-        # if i%3 == 0:
-        #     print("Run Game loop here!")
+    def CalcAndPump(self):
+        self.level.update_player_data()
+        self.level.update_npc_data()
+        self.level.all_sprite_list.update()
         self.Pump()
 
 
@@ -122,7 +137,7 @@ if __name__ == '__main__':
     os.system("cls")
     # args = get_args()
     server = MMXServer(localaddr=('localhost', 12000))
-    print(server)
+    logging.info(server)
     while True:
-        server.CalcAndPump(i)
+        server.CalcAndPump()
         sleep(0.0001)
