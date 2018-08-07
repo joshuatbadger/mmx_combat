@@ -23,7 +23,7 @@ class BaseEnemy(pygame.sprite.Sprite):
         # Determine which update function to use based on whether calculations
         # are done on the server or local
         self.update = self.update_remote if from_network else self.update_local
-        logging.warning(f"Current update method: {self.update.__name__}")
+        # logging.warning(f"Current update method: {self.update.__name__}")
 
         # Make a box of specified size for the enemy, make magenta
         self.image = pygame.Surface([width, height])
@@ -70,29 +70,30 @@ class BaseEnemy(pygame.sprite.Sprite):
         if self.following == 0:
             self.waiting = 60
         else:
-            hypot = math.hypot(self.target.rect.x - self.rect.x, self.target.rect.y - self.rect.y) / (CN.RUN_SPEED*.5)
+            hypot = math.hypot(self.target.rect.centerx - self.rect.centerx, self.target.rect.centery - self.rect.centery) / (CN.RUN_SPEED*.5)
             if hypot == 0:
                 hypot = 1
-            self.x_velocity = ((self.target.rect.x + self.rect.width/2) - (self.rect.x + self.rect.width/2)) / hypot
-            self.y_velocity = ((self.target.rect.y + self.rect.height/2) - (self.rect.y + self.rect.height/2)) / hypot
+            self.x_velocity = (self.target.rect.centerx - self.rect.centerx) / hypot
+            self.y_velocity = (self.target.rect.centery - self.rect.centery) / hypot
 
 
     def patrol(self):
-        if not self.target:
-            # Find closest target
+        # Find closest target
+        try:
+            old_dist = math.hypot(self.target.rect.centerx - self.rect.centerx, self.target.rect.centery - self.rect.centery)
+        except:
             old_dist = 5000
-            for player in self.level.players:
-                new_dist = math.hypot(player.rect.x - self.rect.x, player.rect.y - self.rect.y)
-                if new_dist <= CN.SCREEN_HREZ/2 and new_dist < old_dist:
-                # if new_dist < old_dist:
-                    self.target = player
-                    self.waiting = 60
-            # if not self.target:
+        for player in self.level.players:
+            new_dist = math.hypot(player.rect.centerx - self.rect.centerx, player.rect.centery - self.rect.centery)
+            # if new_dist <= CN.SCREEN_HREZ/2 and new_dist < old_dist:
+            if new_dist < old_dist:
+                self.target = player
+                self.waiting = 60
 
-        else:
+        if self.target:
             # Confirm the target is close enough to attack
-            dist = math.hypot(self.target.rect.x - self.rect.x, self.target.rect.y - self.rect.y)
-            if dist > 600:
+            dist = math.hypot(self.target.rect.centerx - self.rect.centerx, self.target.rect.centery - self.rect.centery)
+            if dist > 600: #TODO: Fix arbitrary number
                 self.target = None
             else:
                 # We're close enough, attack!

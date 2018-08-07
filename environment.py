@@ -175,6 +175,8 @@ class Level(object):
                     self.all_sprite_list.add(remote_player)
             except KeyError as e:
                 logging.warning('Stuff broke, yo.')
+                self.players.remove(remote_player)
+                self.all_sprite_list.remove(remote_player)
                 pass
             except:
                 logging.warning(traceback.format_exc())
@@ -192,7 +194,7 @@ class Level(object):
                 try:
                     if npc_id not in self.npc_ids:
                         self.npc_ids.add(npc_id)
-                        logging.debug(f'Got new NPC "{npc_id}"')
+                        # logging.debug(f'Got new NPC "{npc_id}"')
                         # logging.debug(f'{json.dumps(npc_data, indent=4)}"')
                         new_npc = BaseEnemy(npc_id, npc_data['x'], npc_data['y'], npc_data['width'], npc_data['height'], self, npc_data['health'], from_network=True)
                         self.all_sprite_list.add(new_npc)

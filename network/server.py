@@ -123,6 +123,7 @@ class MMXServer(Server):
         [p.Send({'action': 'updatefromserver', 'data': self.data_cache}) for p in self.players]
 
     def CalcAndPump(self):
+        # self.Pump()
         self.level.update_player_data()
         self.level.update_npc_data()
         self.level.all_sprite_list.update()

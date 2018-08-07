@@ -624,6 +624,11 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             my_player_dict = all_player_dict['player'][self.id]
         except KeyError:
             logging.warning(f"Oops, {self.id} is gone!")
+            logging.warning(f"{json.dumps(all_player_dict['player'], sort_keys=True, indent=4)}")
+            try:
+                self.LEVEL.player_names.remove(str(self.id))
+            except:
+                pass
             self.kill()
             return
 
