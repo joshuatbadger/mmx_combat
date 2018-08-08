@@ -622,9 +622,17 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         # logging.debug(f"Updating {self.id}")
         try:
             my_player_dict = all_player_dict['player'][self.id]
+            # logging.debug(f'{json.dumps(my_player_dict, indent=4)}')
+            for attr, v in my_player_dict.items():
+                if attr not in ('x', 'y', 'width', 'height') and attr[0] != attr.upper()[0]:
+                    setattr(self, attr, v)
+            self.rect.x = my_player_dict['x']
+            self.rect.width = my_player_dict['width']
+            self.rect.y = my_player_dict['y']
+            self.rect.height = my_player_dict['height']
         except KeyError:
             logging.warning(f"Oops, {self.id} is gone!")
-            logging.warning(f"{json.dumps(all_player_dict['player'], sort_keys=True, indent=4)}")
+            # logging.warning(f"{json.dumps(all_player_dict['player'], sort_keys=True, indent=4)}")
             try:
                 self.LEVEL.player_names.remove(str(self.id))
             except:
@@ -633,13 +641,14 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             return
 
         # logging.debug(json.dumps(my_player_dict, indent=4, sort_keys=True))
-        for attr, v in my_player_dict.items():
-            if attr not in ('x', 'y', 'width', 'height') and attr[0] != attr.upper()[0]:
-                setattr(self, attr, v)
-        self.rect.x = my_player_dict['x']
-        self.rect.width = my_player_dict['width']
-        self.rect.y = my_player_dict['y']
-        self.rect.height = my_player_dict['height']
+
+        # for attr, v in my_player_dict.items():
+        #     if attr not in ('x', 'y', 'width', 'height') and attr[0] != attr.upper()[0]:
+        #         setattr(self, attr, v)
+        # self.rect.x = my_player_dict['x']
+        # self.rect.width = my_player_dict['width']
+        # self.rect.y = my_player_dict['y']
+        # self.rect.height = my_player_dict['height']
         # TODO: Need to build in acks check, ie, is the data stale?
 
     def _display_stats(self):

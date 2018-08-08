@@ -47,7 +47,7 @@ class BaseEnemy(pygame.sprite.Sprite):
 
         self.collide_damage = 1
         # logging.info(f'{self.level.server} - I am enemy {self.id}')
-        self.level.data_cache['npc'][self.id] = dict()
+        self.level.data_cache['npc'][self.id] = self.build_npc_dict()
         # logging.debug("I'm a new enemy!")
 
     def damage(self, amount):

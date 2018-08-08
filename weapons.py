@@ -57,6 +57,13 @@ class PlayerBuster1(BaseWeapon, pygame.sprite.Sprite):
             self.destroy()
             return
         self.rect.x += self.x_velocity
+
+        # check for level out-of-bounds
+        if self.rect.x > self.parent.LEVEL.width or self.rect.x < 0:
+            logging.debug(f"{self.id} out of bounded")
+            self.destroy()
+            return
+
         # Check for wall collisions
         block_hit_list = pygame.sprite.spritecollide(self, self.walls, False)
         for block in block_hit_list:

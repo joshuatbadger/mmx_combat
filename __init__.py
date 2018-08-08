@@ -134,7 +134,7 @@ def start_game(args):
     if args.solo:
         level = TestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username, network=False)
     elif args.server:
-        threading.Thread(target=start_server, daemon=True).start()
+        threading.Thread(target=start_server, daemon=True, name='server_thread').start()
         # time.sleep(3)
         level = ServerTestLevel(CN.DEFAULT_SERVER_IP, CN.DEFAULT_SERVER_PORT, args.username)
     elif args.useserver:
