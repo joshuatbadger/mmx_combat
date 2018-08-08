@@ -60,7 +60,7 @@ class PlayerBuster1(BaseWeapon, pygame.sprite.Sprite):
 
         # check for level out-of-bounds
         if self.rect.x > self.parent.LEVEL.width or self.rect.x < 0:
-            logging.debug(f"{self.id} out of bounded")
+            # logging.debug(f"{self.id} out of bounded")
             self.destroy()
             return
 
