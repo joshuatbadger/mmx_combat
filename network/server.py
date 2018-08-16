@@ -1,6 +1,8 @@
 import os
 os.environ["PYTHONDONTWRITEBYTECODE"] = 'stobbit'
+import pdb
 import sys
+import copy
 import json
 import pygame
 import socket
@@ -14,7 +16,9 @@ from weakref import WeakKeyDictionary
 from PodSixNet.Channel import Channel
 from PodSixNet.Server import Server
 
-logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
+import MMX_Combat.constants as CN
+
+logging.basicConfig(level=logging.DEBUG, format=CN.LOG_FMT)
 
 try:
     from ..environment import TestLevel
@@ -105,7 +109,6 @@ class MMXClientChannel(Channel):
         pass
 
     def Network_updateserver(self, data):
-        # logging.debug(f"Client wants me to do something!")
         self._server.UpdateData(data)
         self._server.SendToAll()
 
@@ -113,8 +116,6 @@ class MMXClientChannel(Channel):
         # logging.debug(f"I have a new connection! (channel level)\n{data}")
         self.id = data['id']
         self.Network_updateserver(data)
-        # self._server.UpdateData(data)
-        # self._server.SendToAll()
 
 class MMXServer(Server):
 
@@ -122,11 +123,10 @@ class MMXServer(Server):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.data_cache = {'player': dict(), 'npc': dict(), 'weap': dict()}
+        self.data_cache = {'player': {}, 'npc': {}, 'weapon': {}}
         self.players = WeakKeyDictionary()
         self.update_interval = 0
         self.level = TestLevel(None, None, 'serverman', False, server_instance=self)
-        self.data_cache_lock = threading.Lock()
         logging.info(f"IP address: {get_lan_ip()}")
 
     def Connected(self, channel, addr):
@@ -135,54 +135,50 @@ class MMXServer(Server):
 
     def AddPlayer(self, player):
         logging.info(f"New Player{str(player.addr)}")
-        self.data_cache_lock.acquire()
         self.players[player] = True
-        logging.debug(json.dumps(self.data_cache, indent=4, sort_keys=True))
-        self.data_cache_lock.release()
+        # logging.debug(json.dumps(self.data_cache, indent=4, sort_keys=True))
 
     def DelPlayer(self, player):
         logging.info("Deleting Player" + str(player.addr))
-        self.data_cache_lock.acquire()
         del self.data_cache['player'][player.id]
         del self.players[player]
-        self.data_cache_lock.release()
 
     def UpdateData(self, data):
-        self.data_cache_lock.acquire()
         try:
-            self.data_cache[data['type']][data['id']] = data.get('data', {})
-
+            # pdb.set_trace()
+            type = data['type']
+            id = data['id']
+            self.data_cache[type][id] = data.get('data', {})
         except:
             logging.warning("Something broke in update data!")
             logging.warning(traceback.format_exc())
             logging.warning(data)
 
-        self.data_cache_lock.release()
 
     def SendToAll(self):
-        # logging.debug("Current data_cache: ")
-        # logging.debug(self.data_cache)
         # confirm all player keys are in data cache before sending?
         try:
-            cur_player_ref_list =    sorted([k.id for k in self.players])
-            # logging.debug(f'Players : {cur_player_ref_list}')
-            cur_player_cached_list = sorted([k for k in sorted(self.data_cache['player'].keys())])
-            # logging.debug(f'Players_: {cur_player_cached_list}')
-            if cur_player_ref_list == cur_player_cached_list:
-                [p.Send({'action': 'updatefromserver', 'data': self.data_cache}) for p in self.players]
-        except AttributeError as e:
-            logging.warning(e)
+            temp_dict = copy.deepcopy(self.data_cache)
+            # logging.debug('Checking player cache')
+            for k, v in temp_dict['player'].items():
+                if v.get('x', None) == None:
+                    logging.debug(f'{k} is not ready for sending yet, pop it out')
+                    temp_dict['player'].pop(k)
+
+            keylist = list(temp_dict.keys())
+            for key in keylist:
+                if key not in ('player', 'npc', 'weapon'):
+                    temp_dict.pop(key)
+                    self.data_cache.pop(key)
+            [p.Send({'action': 'updatefromserver', 'data': temp_dict}) for p in self.players]
+        except (AttributeError, RuntimeError) as e:
+            logging.warning(traceback.format_exc())
             logging.warning("Skipping update this frame")
         except:
             logging.error(traceback.format_exc())
-        # logging.debug(self.data_cache['players'].keys())
-        # return
-        [p.Send({'action': 'updatefromserver', 'data': self.data_cache}) for p in self.players]
 
     def CalcAndPump(self):
-        # self.Pump()
-        self.level.update_player_data()
-        self.level.update_npc_data()
+        self.level.update_data()
         self.level.all_sprite_list.update()
         self.Pump()
 

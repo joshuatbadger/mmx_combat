@@ -16,7 +16,7 @@ except ImportError as e:
     print("Can't import `pygame`. Did you remember to activate the virtual environment?")
     sys.exit(5)
 
-logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -294,12 +294,15 @@ def start_game(args):
         # Update info on all players
         proc_start_time = datetime.datetime.now()
 
-        level.update_player_data()
-        level.update_npc_data()
-        # TODO: check for conflicts between local_player local data and server data
-
         if local_player not in level.all_sprite_list:
             local_player.update()
+
+        level.chat_client.Loop()
+
+        level.update_data()
+        # TODO: check for conflicts between local_player local data and server data
+
+
 
         level.all_sprite_list.update()
 
@@ -357,6 +360,7 @@ if __name__ == "__main__":
     if mmx_main_path not in sys.path:
         sys.path.append(mmx_main_path)
     import MMX_Combat.constants as CN
+    logging.basicConfig(level=logging.DEBUG, format=CN.LOG_FMT)
     args = get_args()
     # logging.debug(args)
     test(args)

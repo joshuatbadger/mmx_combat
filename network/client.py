@@ -1,11 +1,15 @@
+import pdb
 import json
 import time
 import socket
 import random
 import logging
+import threading
 import traceback
 
 from PodSixNet.Connection import connection, ConnectionListener
+
+import MMX_Combat.constants as CN
 
 logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
 
@@ -24,6 +28,10 @@ class MMXClient(ConnectionListener):
 
     def send_player_data_update_to_server(self, player_dict):
         send_dict = {'action': 'updateserver', 'type': 'player', 'id': player_dict['id'], 'data': player_dict}
+        connection.Send(send_dict)
+
+    def send_weapon_to_server(self, weapon_dict):
+        send_dict = {'action': 'updateserver', 'type': 'weapon', 'id': weapon_dict['id'], 'data': weapon_dict}
         connection.Send(send_dict)
 
     # Built-in ConnectionListener stuff
@@ -52,6 +60,9 @@ class MMXClient(ConnectionListener):
         try:
             # logging.debug('Got data from server')
             # logging.debug(f'{json.dumps(data, indent=4)}\n')
+            if len(data.keys()) > 3:
+                raise ValueError("Data cache malformed!")
+                # pdb.set_trace()
             if self.level:
                 self.level.data_cache = data['data']
         except Exception as e:

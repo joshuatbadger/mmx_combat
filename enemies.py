@@ -131,8 +131,12 @@ class BaseEnemy(pygame.sprite.Sprite):
         # logging.info(f'Updating: {self.id}')
         data = self.level.data_cache['npc']
         try:
-            self.rect.x = data[self.id]['x']
-            self.rect.y = data[self.id]['y']
+            npc_data = data.get(self.id, None)
+            if not npc_data:
+                self.destroy()
+            else:
+                self.rect.x = npc_data['x']
+                self.rect.y = npc_data['y']
         except:
             logging.error("Failed to update {self.id}")
             logging.error(f'{json.dumps(data, indent=4)}')
@@ -151,4 +155,10 @@ class BaseEnemy(pygame.sprite.Sprite):
         # TODO: rather than kill, keep in memory so we can respawn once
         # players are far enough away
         logging.debug(f'Blargh, {self.id} is dead!')
+        self.level.all_sprite_list.remove(self)
+        try:
+            self.level.data_cache['npc'].pop(self.id)
+        except KeyError:
+            # It's already been pulled from the level's data_cache, move on
+            pass
         self.kill()

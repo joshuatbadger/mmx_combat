@@ -94,6 +94,8 @@ LEVEL_TILE_SIZE = 40
 
 
 # server and network stuff
-
 DEFAULT_SERVER_IP = "localhost"
 DEFAULT_SERVER_PORT = 12000
+
+# logging stuff
+LOG_FMT = '%(relativeCreated)6d %(threadName)s %(levelname)s %(filename)s %(funcName)s, Line %(lineno)d\n\t%(message)s\n'

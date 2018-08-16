@@ -81,6 +81,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
         self.CAN_AIR_DASH = False
         self.BASE_HEALTH = CN.BASE_HEALTH
         self.LEVEL = level
+        self.ON_NETWORK = self.LEVEL.server_addr != None
         self.GRAVITY = CN.GRAVITY
         self.JUMP_SPEED = CN.JUMP_SPEED
         self.DELAY_JUMP_PERIOD = CN.DELAY_JUMP_PERIOD
@@ -320,7 +321,7 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             # Handle network communication
             self.LEVEL.chat_client.send_player_data_update_to_server(self._build_player_dict())
             # self.LEVEL.chat_client.send_player_data_update_to_server({'un': self.id, 'data': 24})
-            self.LEVEL.chat_client.Loop()
+            # self.LEVEL.chat_client.Loop()
 
     def _build_player_dict(self):
         upload_dict = dict()
@@ -492,21 +493,32 @@ class LocalPlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
 
     def fire(self):
         if len(self.shot_weapons) < self.MAX_SHOTS and not self.wait_move_for_weapon and not self.fire_wait and self.taking_damage <= 0:
-            if self.charge_level < 15:
-                new_buster = PlayerBuster1(self, 1, [5,5], CN.YELLOW)
+            weap_dict = {}
+            weap_dict['on_network'] = self.ON_NETWORK
+            if self.charge_level < 0:
+                raise ValueError("How did the local player get negative charge? (Ooh, that's an interesting mechanic idea...)")
+            elif self.charge_level < 15:
+                weap_dict['energy'] = 1
+                weap_dict['size'] = (5,5)
+                weap_dict['color'] = CN.YELLOW
             elif self.charge_level < 50:
-                new_buster = PlayerBuster1(self, 3, [10,5], CN.CYAN)
+                weap_dict['energy'] = 3
+                weap_dict['size'] = (10,5)
+                weap_dict['color'] = CN.CYAN
             elif self.charge_level >= 50:
-                new_buster = PlayerBuster1(self, 10, [30,30], CN.GREEN, False, False)
+                weap_dict['energy'] = 10
+                weap_dict['size'] = (30,30)
+                weap_dict['color'] = CN.GREEN
+                weap_dict['destroyed_by_enemies'] = 10
+
+            new_buster = PlayerBuster1(self, **weap_dict)
+
             self.shot_weapons.append(new_buster)
-            self.LEVEL.all_sprite_list.add(new_buster)
-            self.fire_wait = 4
             self.discharge()
 
     def alt_fire(self):
         if not self.wait_move_for_weapon and not self.fire_wait and self.taking_damage <= 0:
-            weapon = self.alt_weapons[self.cur_alt_weapon](self)
-            self.LEVEL.all_sprite_list.add(weapon)
+            weapon = self.alt_weapons[self.cur_alt_weapon](self, on_network=self.ON_NETWORK)
 
 
     def stop(self):
@@ -630,6 +642,7 @@ class RemotePlayerObj(BasePlayerObj, pygame.sprite.Sprite, object):
             self.rect.width = my_player_dict['width']
             self.rect.y = my_player_dict['y']
             self.rect.height = my_player_dict['height']
+            self.direction = my_player_dict['dir']
         except KeyError:
             logging.warning(f"Oops, {self.id} is gone!")
             # logging.warning(f"{json.dumps(all_player_dict['player'], sort_keys=True, indent=4)}")
