@@ -87,7 +87,7 @@ def start_server():
     '''
     from MMX_Combat.network.server import MMXServer
     from time import sleep
-    server = MMXServer(localaddr=('127.0.0.1', 12000))
+    server = MMXServer(localaddr=('', 12000))
     logging.debug(server)
     pygame.init()
     server_clock = pygame.time.Clock()
